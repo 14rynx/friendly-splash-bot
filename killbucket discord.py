@@ -20,31 +20,14 @@ from keep_alive import keep_alive
 client = discord.Client()
 
 def killboard():
+  leaderboard = json.loads('json-weekly.txt')
 
-    with open('json-weekly.txt','r') as infile:
-        leaderboard = json.load(infile)
-    
-    string2 = '**Solo:**\n:first_place:' + leaderboard['solo']['first']['pilotname'] +'-'+ str(leaderboard['solo']['first']['count']) +'\n'
-    string2 = string2 +':second_place:' + leaderboard['solo']['second']['pilotname'] +'-' +str(leaderboard['solo']['second']['count']) +'\n'
-    string2 = string2 +':third_place:' + leaderboard['solo']['third']['pilotname'] +'-' +str(leaderboard['solo']['third']['count']) +'\n\n'
-
-    string2 = string2 +'**Five:**\n:first_place:' + leaderboard['five']['first']['pilotname'] +'-'+ str(leaderboard['five']['first']['count']) +'\n'
-    string2 = string2 +':second_place:' + leaderboard['five']['second']['pilotname'] +'-' +str(leaderboard['five']['second']['count']) +'\n'
-    string2 = string2 +':third_place:' + leaderboard['five']['third']['pilotname'] +'-' +str(leaderboard['five']['third']['count']) +'\n\n'
-
-    string2 = string2 +'**Ten:**\n:first_place:' + leaderboard['ten']['first']['pilotname'] +'-'+ str(leaderboard['ten']['first']['count']) +'\n'
-    string2 = string2 +':second_place:' + leaderboard['ten']['second']['pilotname'] +'-' +str(leaderboard['ten']['second']['count']) +'\n'
-    string2 = string2 +':third_place:' + leaderboard['ten']['third']['pilotname'] +'-' +str(leaderboard['ten']['third']['count']) +'\n\n'
-
-    string2 = string2 +'**Twenty:**\n:first_place:' + leaderboard['twenty']['first']['pilotname'] +'-'+ str(leaderboard['twenty']['first']['count']) +'\n'
-    string2 = string2 +':second_place:' + leaderboard['twenty']['second']['pilotname'] +'-' +str(leaderboard['twenty']['second']['count']) +'\n'
-    string2 = string2 +':third_place:' + leaderboard['twenty']['third']['pilotname'] +'-' +str(leaderboard['twenty']['third']['count']) +'\n\n'
-
-    string2 = string2 +'**Blob:**\n:first_place:' + leaderboard['blob']['first']['pilotname'] +'-'+ str(leaderboard['blob']['first']['count']) +'\n'
-    string2 = string2 +':second_place:' + leaderboard['blob']['second']['pilotname'] +'-' +str(leaderboard['blob']['second']['count']) +'\n'
-    string2 = string2 +':third_place:' + leaderboard['blob']['third']['pilotname'] +'-' +str(leaderboard['blob']['third']['count']) +'\n\n'
-
-    return string2
+  string = ''
+  for bucket in leaderboard.keys():
+    string += f'**{bucket.capitalize()}:**\n'
+    for place, data in leaderboard[bucket].items():
+        string += f':{place}_place: {data["pilotname"]} - {data["count"]}\n'
+    string += '\n'
 
 def char_id_lookup(char_name):
     pull_url = "https://esi.evetech.net/legacy/search/?categories=character&datasource=tranquility&language=en-us&search={}&strict=true"
@@ -165,9 +148,10 @@ async def on_message(message):
                 reaction_text = random.choice(midgang_phrases) + '\n **' + kill_id +'- Almost...still not cool enough to be elitist**'
               else:
                 reaction_text = random.choice(smallgang_phrases) + '\n **' + kill_id +'- You\'re an elitist nano prick**'
-              if kills['solo']+kills['five']+kills['ten']+kills['fifteen']+kills['twenty']+kills['thirty']+kills['forty']+kills['fifty']+kills['blob'] < 1000:
+              if sum(kills.values()) < 1000:
                 reaction_text = kill_id + ' you don\'t undock much do you'
-              
+
+              #build the graph              
               with open('pilots.txt',"a") as f:
                 print(str(int_char_id) + "\n",file=f)
               pilots = kills.keys()
@@ -176,12 +160,10 @@ async def on_message(message):
               plt.ylabel('Number of Kills')
               plt.title('Involved Pilots per KM for zkillID:'+kill_id,color=color)
               fig1=plt.gcf()
-              #plt.show()
               fig1.savefig(fname='plot.png',transparent=True)
               plt.clf()
               await message.channel.send(file=discord.File('plot.png'), content = reaction_text)
-              #await message.channel.send(reaction_text +'\n||Send isk to propeine in game||')
-              #os.remove('plot.png')
+
         else:
           await message.channel.send('I don\'t know who you\'re talking about')
               

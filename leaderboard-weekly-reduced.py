@@ -127,8 +127,11 @@ def get_killbucket(char_id):
                 int_char_id = int(char_id_lookup(char_id))
 
         # set up initial webpage hit
-        link = "https://zkillboard.com/api/kills/characterID/" + str(int_char_id) + "/pastSeconds/604800/no-attackers/page/" + \
-            str(page_num) + "/"
+        link = f"https://zkillboard.com/api/kills/characterID/{int_char_id}/pastSeconds/604800/no-attackers/page/{page_num}/"
+
+        # req = requests.get(link, headers={'Accept-Encoding': 'gzip', "User-Agent": "propeine-bot"})
+        # res = req.json()
+
         response = requests.session()
         response.headers.update(
             {'Accept-Encoding': 'gzip', "User-Agent": "propeine-bot"})
@@ -152,8 +155,7 @@ def get_killbucket(char_id):
                     pilots_involved["blob"] += 1
             page_num += 1
             time.sleep(0.5)
-            link = "https://zkillboard.com/api/kills/characterID/" + str(int_char_id) + "/pastSeconds/604800/no-attackers/page/" + \
-                str(page_num) + "/"
+            link = f"https://zkillboard.com/api/kills/characterID/{int_char_id}/pastSeconds/604800/no-attackers/page/{page_num}/"
             response = requests.get(link)
         return pilots_involved
     except:
