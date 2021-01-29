@@ -20,7 +20,8 @@ from keep_alive import keep_alive
 client = discord.Client()
 
 def killboard():
-  leaderboard = json.loads('json-weekly.txt')
+  with open('json-weekly.txt','r') as infile:
+    leaderboard = json.load(infile)
 
   string = ''
   for bucket in leaderboard.keys():
@@ -28,6 +29,7 @@ def killboard():
     for place, data in leaderboard[bucket].items():
         string += f':{place}_place: {data["pilotname"]} - {data["count"]}\n'
     string += '\n'
+  return string
 
 def char_id_lookup(char_name):
     pull_url = "https://esi.evetech.net/legacy/search/?categories=character&datasource=tranquility&language=en-us&search={}&strict=true"
