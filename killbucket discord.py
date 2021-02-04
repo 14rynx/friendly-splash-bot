@@ -5,6 +5,7 @@ import os
 import matplotlib.pyplot as plt
 import discord
 import random
+import yfinance as yf
 
 
 plt.rcdefaults()
@@ -19,11 +20,22 @@ from keep_alive import keep_alive
 
 client = discord.Client()
 
+def stonks(ticker):
+  try:
+    tickerData = yf.Ticker(ticker)
+    tickerDf = tickerData.history(period='1d')
+    return round(tickerDf['Close'][0],4)
+  except:
+    return 'error'
+  
+
+
 def killboard():
+  #open the current leaderboard json
   with open('json-weekly.txt','r') as infile:
     leaderboard = json.load(infile)
-
   string = ''
+  #build the message
   for bucket in leaderboard.keys():
     string += f'**{bucket.capitalize()}:**\n'
     for place, data in leaderboard[bucket].items():
@@ -111,6 +123,41 @@ async def on_message(message):
         return
     if message.content =='!bucketboard':
       await message.channel.send(killboard())
+
+    if message.content.startswith('!stonks'):
+      print('someone requested info on '+message.content[8:])
+      await message.channel.send(message.content[8:]+ ' Current Price='+str(stonks(message.content[8:].strip())))
+
+    if message.content.startswith('!linkkb'):
+      kill_id = message.content[8:]
+      text_link = 'https://zkillboard.com/character/{}/'
+      try:
+        text_link = text_link.format(char_id_lookup(kill_id))
+        await message.channel.send(text_link)
+      except:
+        await message.channel.send('I\'m not sure who that is')
+    
+    if message.content.startswith('!teams'):
+        names = message.content[7:]
+        pilots = names.split(',')
+        print(pilots)
+        total_pilots = len(pilots)/2+1
+        return_message=''
+        if len(pilots)%2 == 1:
+          pick = random.randrange(0,len(pilots))
+          return_message='Referee:'+pilots[pick]+'\n'
+          pilots.pop(pick)
+          total_pilots = len(pilots)/2+1
+        return_message = return_message+'1:\n'
+        while len(pilots) > 0:
+            pick = random.randrange(0,len(pilots))
+            return_message += pilots[pick]+'\n'
+            if len(pilots) == total_pilots:
+              return_message += '\n2:\n'
+              total_pilots = 0
+            pilots.pop(pick)
+        await message.channel.send(return_message)
+    
     if message.content.startswith('!killbucket'):
       if message.content == '!killbucket help':
         await message.channel.send('Usage:Place zkillID (from URL on zkill.com) after !killbucket \n Calculates kills based on pilots involved for buckets for the most recent 1000  kills\nSmall Gang - <10, Mid gang- 10>= kills<30, Blobber - >=30')
@@ -152,8 +199,7 @@ async def on_message(message):
                 reaction_text = random.choice(smallgang_phrases) + '\n **' + kill_id +'- You\'re an elitist nano prick**'
               if sum(kills.values()) < 1000:
                 reaction_text = kill_id + ' you don\'t undock much do you'
-
-              #build the graph              
+              
               with open('pilots.txt',"a") as f:
                 print(str(int_char_id) + "\n",file=f)
               pilots = kills.keys()
@@ -162,10 +208,12 @@ async def on_message(message):
               plt.ylabel('Number of Kills')
               plt.title('Involved Pilots per KM for zkillID:'+kill_id,color=color)
               fig1=plt.gcf()
+              #plt.show()
               fig1.savefig(fname='plot.png',transparent=True)
               plt.clf()
               await message.channel.send(file=discord.File('plot.png'), content = reaction_text)
-
+              #await message.channel.send(reaction_text +'\n||Send isk to propeine in game||')
+              #os.remove('plot.png')
         else:
           await message.channel.send('I don\'t know who you\'re talking about')
               
