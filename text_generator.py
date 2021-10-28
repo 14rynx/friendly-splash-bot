@@ -1,18 +1,18 @@
 import random
 
 
-def phrase_generator( name, kills):
+def phrase_generator(name, kills):
     small_gang = kills['solo'] + kills['five'] + kills['ten']
     blob_gang = kills['forty'] + kills['fifty'] + kills['blob']
     mid_gang = kills['fifteen'] + kills['twenty'] + kills['thirty']
     if max(kills, key=lambda key: kills[key]) == 'solo':
-        return solo(name) + activity(name, kills, 45)  # One Kill every other day
+        return solo(name) + activity(name, kills, 90)  # One Kill every other day
     elif small_gang < blob_gang and mid_gang < blob_gang:
-        return blobber(name) + activity(name, kills, 180)  # Two Kills a day
+        return blobber(name) + activity(name, kills, 360)  # Two Kills a day
     elif mid_gang > small_gang and mid_gang > blob_gang:
-        return midgang(name) + activity(name, kills, 180)  # Two Kills a day
+        return midgang(name) + activity(name, kills, 360)  # Two Kills a day
     else:
-        return smallgang(name)  + activity(name, kills, 90)  # One Kill a day
+        return smallgang(name) + activity(name, kills, 180)  # One Kill a day
 
 
 def help_text():
@@ -73,5 +73,5 @@ def midgang(name):
 
 def activity(name, kills, requirement):
     if sum(kills.values()) < requirement:
-        return f"\n {name} you don\'t undock much do you"
+        return f"\n And you don\'t undock much, do you?"
     return ""

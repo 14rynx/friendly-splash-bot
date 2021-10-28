@@ -5,3 +5,4 @@ yfinance
 asyncio
 aiohttp
 flask
+certifi
