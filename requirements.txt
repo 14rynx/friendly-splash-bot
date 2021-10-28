@@ -1,0 +1,7 @@
+requests
+matplotlib
+discord
+yfinance
+asyncio
+aiohttp
+flask
