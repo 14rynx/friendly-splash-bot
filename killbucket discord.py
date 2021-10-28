@@ -147,7 +147,7 @@ async def on_message(message):
 
         # Logging
         with open('pilots.txt', "a") as f:
-            print(str(character_id) + "\n", file=f)
+            print(str(character_id), file=f)
 
         # Make plot
         plt.bar(killbuckets.keys(), killbuckets.values(), align='center', alpha=0.5, color=color)
