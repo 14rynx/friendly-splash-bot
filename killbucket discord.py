@@ -12,6 +12,9 @@ import os
 from datetime import datetime, timedelta
 from text_generator import phrase_generator, start_generator, help_text
 
+# Config
+days = 180
+
 plt.rcdefaults()
 color = 'darkgray'
 plt.rc('font', weight='bold')
@@ -52,50 +55,6 @@ def char_id_lookup(char_name):
     return resp.json()['character'][0]
 
 
-async def get_buckets(character_id):
-    # dictionary for how many pilots involved in killmails
-    buckets = {
-        "solo": 0,
-        "five": 0,
-        "ten": 0,
-        "fifteen": 0,
-        "twenty": 0,
-        "thirty": 0,
-        "forty": 0,
-        "fifty": 0,
-        "blob": 0,
-    }
-
-    kills = await gather_kills(
-        f"https://zkillboard.com/api/kills/characterID/{character_id}/kills/",
-        datetime.utcnow() - timedelta(days=180)
-    )
-
-    for kill in kills:
-        if "attackers" in kill:
-            pilots = len(kill["attackers"])
-            if pilots == 1:
-                buckets["solo"] += 1
-            elif pilots < 5:
-                buckets["five"] += 1
-            elif pilots < 10:
-                buckets["ten"] += 1
-            elif pilots < 15:
-                buckets["fifteen"] += 1
-            elif pilots < 20:
-                buckets["twenty"] += 1
-            elif pilots < 30:
-                buckets["thirty"] += 1
-            elif pilots < 40:
-                buckets["forty"] += 1
-            elif pilots < 50:
-                buckets["fifty"] += 1
-            elif pilots >= 50:
-                buckets["blob"] += 1
-
-    return buckets
-
-
 @client.event
 async def on_ready():
     print(f'We have logged in as {client.user}')
@@ -129,7 +88,7 @@ async def on_message(message):
         ))
 
     elif message.content == '!killbucket help':
-        await message.channel.send(help_text())
+        await message.channel.send(help_text(days))
 
     elif message.content.startswith('!killbucket'):
         await message.channel.send(start_generator() + '\n This might take a minute...')
@@ -143,7 +102,10 @@ async def on_message(message):
                 await message.channel.send('I don\'t know who you\'re talking about')
                 return
 
-        killbuckets = await get_buckets(character_id)  # assumes !killbucket_zkillid
+        killbuckets = await gather_kills(
+            f"https://zkillboard.com/api/kills/characterID/{character_id}/kills/",
+            datetime.utcnow() - timedelta(days=days)
+        )
 
         # Logging
         with open('pilots.txt', "a") as f:
@@ -158,28 +120,57 @@ async def on_message(message):
         plt.clf()
 
         # Send message
-        await message.channel.send(file=discord.File('plot.png'), content=phrase_generator(character, killbuckets))
+        await message.channel.send(file=discord.File('plot.png'), content=phrase_generator(character, killbuckets, days))
 
 
-async def get_kill(session, kill_id, kill_hash, start, data, over):
+async def get_kill(session, kill_id, kill_hash, start, buckets, over):
     async with session.get(f"https://esi.evetech.net/latest/killmails/{kill_id}/{kill_hash}/?datasource=tranquility") as resp:
         try:
             kill = await resp.json(content_type=None)
             if "killmail_time" in kill:
                 time = datetime.strptime(kill['killmail_time'], '%Y-%m-%dT%H:%M:%SZ')
                 if start < time:
-                    data.append(kill)
+                    if "attackers" in kill:
+                        pilots = len(kill["attackers"])
+                        if pilots == 1:
+                            buckets["solo"] += 1
+                        elif pilots < 5:
+                            buckets["five"] += 1
+                        elif pilots < 10:
+                            buckets["ten"] += 1
+                        elif pilots < 15:
+                            buckets["fifteen"] += 1
+                        elif pilots < 20:
+                            buckets["twenty"] += 1
+                        elif pilots < 30:
+                            buckets["thirty"] += 1
+                        elif pilots < 40:
+                            buckets["forty"] += 1
+                        elif pilots < 50:
+                            buckets["fifty"] += 1
+                        elif pilots >= 50:
+                            buckets["blob"] += 1
                 else:
                     over.append(kill)
         except json.decoder.JSONDecodeError:
-            await get_kill(session, kill_id, kill_hash, start, data, over)
+            await get_kill(session, kill_id, kill_hash, start, buckets, over)
 
 
 # Function to get all kills from a zkb link
 async def gather_kills(zkill_url, end_date):
     ssl_context = ssl.create_default_context(cafile=certifi.where())
 
-    kills = []
+    buckets = {
+        "solo": 0,
+        "five": 0,
+        "ten": 0,
+        "fifteen": 0,
+        "twenty": 0,
+        "thirty": 0,
+        "forty": 0,
+        "fifty": 0,
+        "blob": 0,
+    }
     kill_overflow = []
 
     async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context)) as session:
@@ -192,12 +183,12 @@ async def gather_kills(zkill_url, end_date):
                     continue  # We just try again
 
                 if type(ids_hashes_response) is dict:
-                    tasks = [get_kill(session, *id_hash, end_date, kills, kill_overflow) for id_hash in ids_hashes_response.items()]
+                    tasks = [get_kill(session, *id_hash, end_date, buckets, kill_overflow) for id_hash in ids_hashes_response.items()]
                 else:
-                    tasks = [get_kill(session, zkb_json["killmail_id"], zkb_json["zkb"]["hash"], end_date, kills, kill_overflow) for zkb_json in ids_hashes_response]
+                    tasks = [get_kill(session, zkb_json["killmail_id"], zkb_json["zkb"]["hash"], end_date, buckets, kill_overflow) for zkb_json in ids_hashes_response]
                 await asyncio.gather(*tasks)
                 page += 1
 
-    return kills
+    return buckets
 
 client.run(os.getenv('TOKEN'))

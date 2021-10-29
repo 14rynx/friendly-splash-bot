@@ -1,23 +1,28 @@
 import random
 
 
-def phrase_generator(name, kills):
+def phrase_generator(name, kills, days):
+    if sum(kills.values()) < days / 4:
+        return f"{name} - you are a true discord warrior!"
     small_gang = kills['solo'] + kills['five'] + kills['ten']
     blob_gang = kills['forty'] + kills['fifty'] + kills['blob']
     mid_gang = kills['fifteen'] + kills['twenty'] + kills['thirty']
     if max(kills, key=lambda key: kills[key]) == 'solo':
-        return solo(name) + activity(name, kills, 90)  # One Kill every other day
+        return solo(name) + activity(name, kills, days / 2)  # One Kill every other day
     elif small_gang < blob_gang and mid_gang < blob_gang:
-        return blobber(name) + activity(name, kills, 360)  # Two Kills a day
+        return blobber(name) + activity(name, kills, 2 * days)  # Two Kills a day
     elif mid_gang > small_gang and mid_gang > blob_gang:
-        return midgang(name) + activity(name, kills, 360)  # Two Kills a day
+        return midgang(name) + activity(name, kills, 2 * days)  # Two Kills a day
     else:
-        return smallgang(name) + activity(name, kills, 180)  # One Kill a day
+        return smallgang(name) + activity(name, kills, days)  # One Kill a day
 
 
-def help_text():
-    return 'Usage:Place zkillID (from URL on zkill.com) after !killbucket \n Calculates kills based on pilots ' \
-           'involved for buckets for the last 90 days\nSmall Gang - <10, Mid gang- 10>= kills<30, Blobber - >=30'
+def help_text(days):
+    return 'Usage: Place character id or name after !killbucket \n' \
+           f'Calculates buckets based on pilots involved for the last {days} days\n' \
+           'Small Gang: involved pilots < 10 \n ' \
+           'Mid Gang: 10 <= involved pilots < 30\n' \
+           'Blob: 30 <= involved pilots'
 
 
 def start_generator():
