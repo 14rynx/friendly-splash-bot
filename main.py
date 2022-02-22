@@ -14,7 +14,7 @@ corporation_days = 30
 alliance_days = 14
 
 
-asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+# asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 client = discord.Client()
 
 
