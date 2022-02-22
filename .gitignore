@@ -126,4 +126,6 @@ dmypy.json
 pick random.py
 
 plot.png
-pilots.txt
+corps.txt
+alliances.txt
+chars.txt
