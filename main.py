@@ -78,8 +78,16 @@ async def on_message(message):
         await message.channel.send(killboard())
 
     elif message.content.startswith('!stonks'):
-        ticker_df = yf.Ticker(message.content[8:]).history(period='1d')
-        await message.channel.send(f"{message.content[8:]} Current Price= {round(ticker_df['Close'][0], 4)}")
+        if message.content[8:] == "":
+            await message.channel.send(f"Usage: !stonks <stock_ticker>")
+        else:
+            try:
+                ticker_df = yf.Ticker(message.content[8:]).history(period='1d')
+                print(ticker_df.all())
+                await message.channel.send(f"{message.content[8:]} Current Price= {round(ticker_df['Close'][0], 4)}")
+            except Exception as e:
+                print(e)
+                await message.channel.send("An Error Ocurred while trying to read that Ticker")
 
     elif message.content.startswith('!linkkb'):
         try:
