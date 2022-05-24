@@ -1,18 +1,18 @@
+from datetime import datetime, timedelta
 import requests
 import json
-import asyncio
 import discord
 import random
-import yfinance as yf
-from text_generator import character_judgment_phrase_generator, character_start_phrase_generator, help_text, group_judgment_phrase_generator, group_start_phrase_generator
-from statistics import make_plot
 import os
+import yfinance as yf
+from text_generator import character_judgment_phrase_generator, character_start_phrase_generator, help_text, \
+    group_judgment_phrase_generator, group_start_phrase_generator
+from statistics import make_plot, gather_buckets
 
 # Config
 character_days = 180
 corporation_days = 30
 alliance_days = 14
-
 
 # asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 client = discord.Client()
@@ -58,7 +58,7 @@ def lookup(string, type):
     except ValueError:
         try:
             id = int(requests.get(f"https://esi.evetech.net/legacy/search/?categories={type}&datasource=tranquility&"
-                        f"language=en-us&search={string}&strict=true").json()[type][0])
+                                  f"language=en-us&search={string}&strict=true").json()[type][0])
         except:
             raise ValueError
     return id
@@ -105,93 +105,80 @@ async def on_message(message):
             + ["2:"] + pilots[team_size: 2 * team_size]
         ))
 
-    elif message.content == '!killbucket --help' or message.content == '!killbucket -h' or  message.content == '!help':
+    elif message.content == '!killbucket --help' or message.content == '!killbucket -h' or message.content == '!help':
         await message.channel.send(help_text(character_days, corporation_days, alliance_days))
 
     elif message.content.startswith('!killbucket --alliance') or message.content.startswith('!killbucket -a'):
         await message.channel.send(group_start_phrase_generator() + '\n This might take a minute...')
 
+        if message.content.startswith('!killbucket -a'):
+            alliance_input = message.content[15:]
+        else:
+            alliance_input = message.content[23:]
+
         try:
-            # Input
-            if message.content.startswith('!killbucket -a'):
-                alliance_input = message.content[15:]
-            else:
-                alliance_input = message.content[23:]
             alliance_id = lookup(alliance_input, "alliance")
-
-            # Statistics
-            buckets = await make_plot(
+        except ValueError:
+            await message.channel.send('I\'m not sure who those guys are')
+        else:
+            kill_buckets = await gather_buckets(
                 f"https://zkillboard.com/api/kills/allianceID/{alliance_id}/kills/",
-                alliance_days,
-                f"Involved Pilots per KM for: {alliance_input} \n Adjusted for Average Pilot",
-                shift_for_char=True
-            )
+                datetime.utcnow() - timedelta(days=alliance_days), aggregate=alliance_id)
+            buckets = await make_plot(kill_buckets,
+                                      f"Involved Pilots per KM for: {alliance_input} \n Aggregated Pilots")
 
-            # Logging
             with open('alliances.txt', "a") as f:
                 print(str(alliance_id), file=f)
 
-            # Output
             await message.channel.send(file=discord.File('plot.png'),
-                                       content=group_judgment_phrase_generator(alliance_input, buckets, alliance_days))
-
-        except ValueError:
-            await message.channel.send('I\'m not sure who those guys are')
+                                       content=group_judgment_phrase_generator(alliance_input, buckets,
+                                                                               alliance_days))
 
     elif message.content.startswith('!killbucket --corporation') or message.content.startswith('!killbucket -c'):
         await message.channel.send(group_start_phrase_generator() + '\n This might take a minute...')
 
+        if message.content.startswith('!killbucket -c'):
+            corp_input = message.content[15:]
+        else:
+            corp_input = message.content[26:]
+
         try:
-            #Input
-            if message.content.startswith('!killbucket -c'):
-                corp_input = message.content[15:]
-            else:
-                corp_input = message.content[26:]
             corporation_id = lookup(corp_input, "corporation")
+        except ValueError:
+            await message.channel.send('I\'m not sure who those guys are')
+        else:
+            kill_buckets = await gather_buckets(f"https://zkillboard.com/api/kills/corporationID/{corporation_id}/kills/",
+                                                datetime.utcnow() - timedelta(days=corporation_days), aggregate=corporation_id)
+            buckets = await make_plot(kill_buckets, f"Involved Pilots per KM for: {corp_input} \n Aggregated Pilots")
 
-            # Statistics
-            buckets = await make_plot(
-                f"https://zkillboard.com/api/kills/corporationID/{corporation_id}/kills/",
-                corporation_days,
-                f"Involved Pilots per KM for: {corp_input} \n Adjusted for Average Pilot",
-                shift_for_char=True
-            )
-
-            # Logging
             with open('corps.txt', "a") as f:
                 print(str(corporation_id), file=f)
 
-            # Output
             await message.channel.send(file=discord.File('plot.png'),
                                        content=group_judgment_phrase_generator(corp_input, buckets, corporation_days))
-
-        except ValueError:
-            await message.channel.send('I\'m not sure who those guys are')
 
     elif message.content.startswith('!killbucket'):
         await message.channel.send(character_start_phrase_generator() + '\n This might take a minute...')
 
+        char_input = message.content[12:]
+
         try:
-            #Input
-            char_input = message.content[12:]
             character_id = lookup(char_input, "character")
-
-            # Statistics
-            buckets = await make_plot(
+        except ValueError:
+            await message.channel.send('I\'m not sure who that is')
+        else:
+            kill_buckets = await gather_buckets(
                 f"https://zkillboard.com/api/kills/characterID/{character_id}/kills/",
-                character_days,
-                f"Involved Pilots per KM for: {char_input}"
-            )
+                datetime.utcnow() - timedelta(days=alliance_days))
+            buckets = await make_plot(kill_buckets,
+                                      f"Involved Pilots per KM for: {char_input}")
 
-            # Logging
             with open('chars.txt', "a") as f:
                 print(str(character_id), file=f)
 
-            # Output
             await message.channel.send(file=discord.File('plot.png'),
-                                       content=character_judgment_phrase_generator(character_id, char_input, buckets, character_days))
+                                       content=character_judgment_phrase_generator(character_id, char_input, buckets,
+                                                                                   character_days))
 
-        except ValueError:
-            await message.channel.send('I\'m not sure who that is')
 
-client.run(os.getenv('TOKEN'))
+client.run(os.getenv("TOKEN"))

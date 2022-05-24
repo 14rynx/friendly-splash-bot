@@ -91,22 +91,22 @@ def character_midgang_generator(name):
     ])
 
 
-def character_activity_generator(name, kills, requirement):
-    if sum(kills.values()) < requirement:
+def character_activity_generator(name, kill_buckets, requirement):
+    if sum(kill_buckets.values()) < requirement:
         return f"\n And you don\'t undock much, do you?"
     return ""
 
 
 # Group Generators
-def group_judgment_phrase_generator(name, kills, days):
-    if sum(kills.values()) < days / 2:
+def group_judgment_phrase_generator(name, kill_buckets, days):
+    if sum(kill_buckets.values()) < days / 2:
         return f"{name} - you guys are true discord warriors!"
 
-    small_gang = kills['solo'] + kills['five'] + kills['ten']
-    blob_gang = kills['forty'] + kills['fifty'] + kills['blob']
-    mid_gang = kills['fifteen'] + kills['twenty'] + kills['thirty']
+    small_gang = kill_buckets['solo'] + kill_buckets['five'] + kill_buckets['ten']
+    blob_gang = kill_buckets['forty'] + kill_buckets['fifty'] + kill_buckets['blob']
+    mid_gang = kill_buckets['fifteen'] + kill_buckets['twenty'] + kill_buckets['thirty']
 
-    if kills['solo'] > max(small_gang, mid_gang, blob_gang):
+    if kill_buckets['solo'] > max(small_gang, mid_gang, blob_gang):
         return group_solo_generator(name)
     elif small_gang < blob_gang and mid_gang < blob_gang:
         return group_blobber_generator(name)
