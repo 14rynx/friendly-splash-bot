@@ -169,7 +169,7 @@ async def on_message(message):
         else:
             kill_buckets = await gather_buckets(
                 f"https://zkillboard.com/api/kills/characterID/{character_id}/kills/",
-                datetime.utcnow() - timedelta(days=alliance_days))
+                datetime.utcnow() - timedelta(days=character_days))
             buckets = await make_plot(kill_buckets,
                                       f"Involved Pilots per KM for: {char_input}")
 
