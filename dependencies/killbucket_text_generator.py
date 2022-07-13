@@ -18,37 +18,62 @@ def help_text(character_days, corporation_days, alliance_days):
             '*Other Functions: \n!stonks, !teams, !linkkb, !bucketboard*'
 
 
-# Solo Generators
-def character_judgment_phrase_generator(character_id, name, kills, days):
-    if sum(kills.values()) < days / 4:
-        return f"{name} - you are a true discord warrior!"
+def judgment_phrase_generator(name, id, kills, days, group):
+    if not group:
+        if sum(kills.values()) < days / 4:
+            return f"{name} - you are a true discord warrior!"
 
-    small_gang = kills['solo'] + kills['five'] + kills['ten']
-    blob_gang = kills['forty'] + kills['fifty'] + kills['blob']
-    mid_gang = kills['fifteen'] + kills['twenty'] + kills['thirty']
+        small_gang = kills['solo'] + kills['five'] + kills['ten']
+        blob_gang = kills['forty'] + kills['fifty'] + kills['blob']
+        mid_gang = kills['fifteen'] + kills['twenty'] + kills['thirty']
 
-    if character_id == 2113113522:
-        return "@𝐋𝐚𝐫𝐲𝐧𝐱#0698 someone is looking for you"
+        if id == 2113113522:
+            return "<@242164531151765505> someone is looking for you"
 
-    if max(kills, key=lambda key: kills[key]) == 'solo':
-        return character_solo_generator(name) + character_activity_generator(name, kills, days / 2)  # One Kill every other day
-    elif small_gang < blob_gang and mid_gang < blob_gang:
-        return character_blobber_generator(name) + character_activity_generator(name, kills, 2 * days)  # Two Kills a day
-    elif mid_gang > small_gang:
-        return character_midgang_generator(name) + character_activity_generator(name, kills, 2 * days)  # Two Kills a day
+        if max(kills, key=lambda key: kills[key]) == 'solo':
+            return character_solo_generator(name) + character_activity_generator(name, kills, days / 2)  # One Kill every other day
+        elif small_gang < blob_gang and mid_gang < blob_gang:
+            return character_blobber_generator(name) + character_activity_generator(name, kills, 2 * days)  # Two Kills a day
+        elif mid_gang > small_gang:
+            return character_midgang_generator(name) + character_activity_generator(name, kills, 2 * days)  # Two Kills a day
+        else:
+            return character_smallgang_generator(name) + character_activity_generator(name, kills, days)  # One Kill a day
     else:
-        return character_smallgang_generator(name) + character_activity_generator(name, kills, days)  # One Kill a day
+        if sum(kills.values()) < days / 2:
+            return f"{name} - you guys are true discord warriors!"
 
+        small_gang = kills['solo'] + kills['five'] + kills['ten']
+        blob_gang = kills['forty'] + kills['fifty'] + kills['blob']
+        mid_gang = kills['fifteen'] + kills['twenty'] + kills['thirty']
 
-def character_start_phrase_generator():
-    return random.choice([
-       'You are probably a filthy blobber, we\'ll see.',
-       'Small gang best gang.', 'Backpacks dont\'t count.',
-       'Strix Ryden #2!',
-       'I miss offgrid links.',
-       'You and 4 alts is BARELY solo.',
-       'Damn Pyfa warriors'
-    ])
+        if kills['solo'] > max(small_gang, mid_gang, blob_gang):
+            return group_solo_generator(name)
+        elif small_gang < blob_gang and mid_gang < blob_gang:
+            return group_blobber_generator(name)
+        elif mid_gang > small_gang:
+            return group_midgang_generator(name)
+        else:
+            return group_smallgang_generator(name)
+
+def start_phrase_generator(group):
+    if not group:
+        return random.choice([
+           'You are probably a filthy blobber, we\'ll see.',
+           'Small gang best gang.', 'Backpacks dont\'t count.',
+           'Strix Ryden #2!',
+           'I miss offgrid links.',
+           'You and 4 alts is BARELY solo.',
+           'Damn Pyfa warriors'
+        ])
+    else:
+        return random.choice([
+            'You are probably all filthy blobbers, we\'ll see.',
+            'Small gang best gang.', 'Backpacks dont\'t count.',
+            'Strix Ryden #2!',
+            'We miss offgrid links',
+            '9 dudes with 5 alts is barely less than ten',
+            'Pyfa Warrior Alliance Please Ignore'
+        ])
 
 
 def character_solo_generator(name):
@@ -95,36 +120,6 @@ def character_activity_generator(name, kill_buckets, requirement):
     if sum(kill_buckets.values()) < requirement:
         return f"\n And you don\'t undock much, do you?"
     return ""
-
-
-# Group Generators
-def group_judgment_phrase_generator(name, kill_buckets, days):
-    if sum(kill_buckets.values()) < days / 2:
-        return f"{name} - you guys are true discord warriors!"
-
-    small_gang = kill_buckets['solo'] + kill_buckets['five'] + kill_buckets['ten']
-    blob_gang = kill_buckets['forty'] + kill_buckets['fifty'] + kill_buckets['blob']
-    mid_gang = kill_buckets['fifteen'] + kill_buckets['twenty'] + kill_buckets['thirty']
-
-    if kill_buckets['solo'] > max(small_gang, mid_gang, blob_gang):
-        return group_solo_generator(name)
-    elif small_gang < blob_gang and mid_gang < blob_gang:
-        return group_blobber_generator(name)
-    elif mid_gang > small_gang:
-        return group_midgang_generator(name)
-    else:
-        return group_smallgang_generator(name)
-
-
-def group_start_phrase_generator():
-    return random.choice([
-       'You are probably all filthy blobbers, we\'ll see.',
-       'Small gang best gang.', 'Backpacks dont\'t count.',
-       'Strix Ryden #2!',
-       'We miss offgrid links',
-       '9 dudes with 5 alts is barely less than ten',
-       'Pyfa Warrior Alliance Please Ignore'
-    ])
 
 
 def group_solo_generator(name):

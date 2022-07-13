@@ -95,5 +95,3 @@ async def make_plot(kill_buckets, title):
 
     fig1.savefig(fname='plot.png', transparent=True)
     plt.clf()
-
-    return kill_buckets
