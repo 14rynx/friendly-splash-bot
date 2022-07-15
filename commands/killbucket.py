@@ -1,6 +1,6 @@
 from dependencies.killbucket_text_generator import judgment_phrase_generator, start_phrase_generator, help_text
 from dependencies.killbucket_statistics import gather_buckets, make_plot
-from dependencies.killbucket_utils import lookup
+from dependencies.utils import lookup
 import discord
 import datetime
 

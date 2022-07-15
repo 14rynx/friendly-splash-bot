@@ -4,7 +4,7 @@ import aiohttp
 import matplotlib.pyplot as plt
 import ssl
 import certifi
-from datetime import datetime, timedelta
+from datetime import datetime
 
 
 async def put_in_bucket(session, kill_id, kill_hash, start, buckets, over, aggregate):
@@ -77,16 +77,6 @@ async def gather_buckets(zkill_url, end_date, aggregate=None):
     return buckets
 
 
-plt.rcdefaults()
-color = 'darkgray'
-plt.rc('font', weight='bold')
-plt.rcParams['text.color'] = color
-plt.rcParams['axes.labelcolor'] = color
-plt.rcParams['xtick.color'] = color
-plt.rcParams['ytick.color'] = color
-plt.rc('axes', edgecolor=color)
-
-
 async def make_plot(kill_buckets, title):
     plt.bar(kill_buckets.keys(), kill_buckets.values(), align='center', alpha=0.5, color=color)
     plt.ylabel('Number of Kills')
@@ -95,3 +85,12 @@ async def make_plot(kill_buckets, title):
 
     fig1.savefig(fname='plot.png', transparent=True)
     plt.clf()
+
+plt.rcdefaults()
+color = 'darkgray'
+plt.rc('font', weight='bold')
+plt.rcParams['text.color'] = color
+plt.rcParams['axes.labelcolor'] = color
+plt.rcParams['xtick.color'] = color
+plt.rcParams['ytick.color'] = color
+plt.rc('axes', edgecolor=color)

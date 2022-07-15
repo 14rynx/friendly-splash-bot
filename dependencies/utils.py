@@ -24,3 +24,14 @@ def lookup(string, return_type):
             return response.json()[return_type][0]["id"]
         except requests.exceptions.RequestException:
             raise ValueError
+
+
+def isk(number):
+    return format(number, ",.0f").replace(',',"'") + " ISK"
+
+
+def convert(number_string):
+    exponent = 3 * number_string.lower().count("k") + 6 * number_string.lower().count("m") + 9 * number_string.lower().count("b")
+    number = float(number_string.lower().replace("k", "").replace("m", "").replace("b", ""))
+    return number * 10 ** exponent
+
