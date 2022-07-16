@@ -60,12 +60,15 @@ async def gather_buckets(zkill_url, end_date, aggregate=None):
 
     async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context)) as session:
         page = 1
-        while len(kill_overflow) == 0 and page < 100:
+        while len(kill_overflow) == 0:
             async with session.get(f"{zkill_url}page/{page}/") as response:
                 try:
                     ids_hashes_response = await response.json(content_type=None)
                 except json.decoder.JSONDecodeError:
                     continue  # We just try again
+
+                if len(ids_hashes_response) == 0:
+                    break
 
                 if type(ids_hashes_response) is dict:
                     tasks = [put_in_bucket(session, *id_hash, end_date, buckets, kill_overflow, aggregate) for id_hash in ids_hashes_response.items()]

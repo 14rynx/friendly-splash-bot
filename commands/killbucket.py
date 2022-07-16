@@ -21,6 +21,7 @@ async def killbucket(arguments, message):
         querry = "allianceID"
         group = True
         days = alliance_days
+
     elif "corporation" in arguments or "c" in arguments:
         name = " ".join(arguments["c"] if "c" in arguments else arguments["corporation"])
         id = lookup(name, 'corporations')
@@ -28,6 +29,7 @@ async def killbucket(arguments, message):
         aggregate = id
         querry = "corporationID"
         days = corporation_days
+
     else:
         name = " ".join(arguments[""])
         id = lookup(name, 'characters')
@@ -41,11 +43,17 @@ async def killbucket(arguments, message):
     elif "d" in arguments:
         days = int(arguments["d"][0])
 
+    until = datetime.datetime.utcnow() - datetime.timedelta(days=days)
+
+    if "alltime" in arguments:
+        until = datetime.datetime(2003, 5, 6, 0, 0)  # Eve release date
+        days = (datetime.datetime.utcnow() - until).days
+
     await message.channel.send(start_phrase_generator(group) + '\n This might take a minute...')
 
     kill_buckets = await gather_buckets(
         f"https://zkillboard.com/api/kills/{querry}/{id}/kills/",
-        datetime.datetime.utcnow() - datetime.timedelta(days=days),
+        until,
         aggregate=aggregate
     )
 

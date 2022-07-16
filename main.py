@@ -53,13 +53,15 @@ async def on_message(message):
     if message.author == client.user:  # It is our own message
         return
 
-    command, arguments = parser(message.content)
-    for mod in modules:
-        for func in dir(mod):
-            if func == command:
-                command_function = getattr(mod, func)
-                if callable(command_function):
-                    await command_function(arguments, message)
+    ret = parser(message.content)
+    if ret is not None:
+        command, arguments = ret
+        for mod in modules:
+            for func in dir(mod):
+                if func == command:
+                    command_function = getattr(mod, func)
+                    if callable(command_function):
+                        await command_function(arguments, message)
 
 
 # Look in the commands directory and import everything from there
