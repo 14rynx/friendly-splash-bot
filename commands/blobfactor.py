@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from utils import lookup
 import asyncio
 import aiohttp
@@ -54,7 +54,7 @@ async def command_blobfactor(arguments, message):
 
     if "help" in arguments:
         await message.channel.send(
-            "Usage:\n!killbucket\n"
+            "Usage:\n!blobfactor\n"
             "<character_name>|<character_id> |\n"
             "-c|--corporation <corporation_name>|<corporation_id>\n"
             "-a|--alliance <alliance_name>|<alliance_id>\n"
@@ -88,7 +88,7 @@ async def command_blobfactor(arguments, message):
     elif "d" in arguments:
         days = int(arguments["d"][0])
 
-    until = datetime.utcnow() - datetime(days=days)
+    until = datetime.utcnow() - timedelta(days=days)
 
     if "alltime" in arguments:
         until = datetime(2003, 5, 6, 0, 0)  # Eve release date
