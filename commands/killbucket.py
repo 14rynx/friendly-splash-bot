@@ -1,11 +1,11 @@
-from dependencies.killbucket_text_generator import judgment_phrase_generator, start_phrase_generator, help_text
-from dependencies.killbucket_statistics import gather_buckets, make_plot
-from dependencies.utils import lookup
+from commands.killbucket_text_generator import judgment_phrase_generator, start_phrase_generator, help_text
+from commands.killbucket_statistics import gather_buckets, make_plot
+from utils import lookup
 import discord
 import datetime
 
 
-async def killbucket(arguments, message):
+async def command_killbucket(arguments, message):
     # Config
     character_days = 180
     corporation_days = 30

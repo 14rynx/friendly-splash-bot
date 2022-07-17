@@ -1,4 +1,4 @@
-async def heat(arguments, message):
+async def command_heat(arguments, message):
 
     total, guns = arguments[""]
     total = int(total)

@@ -56,20 +56,30 @@ async def on_message(message):
     ret = parser(message.content)
     if ret is not None:
         command, arguments = ret
-        for mod in modules:
-            for func in dir(mod):
-                if func == command:
-                    command_function = getattr(mod, func)
-                    if callable(command_function):
-                        await command_function(arguments, message)
+
+        if command == "help":
+            await message.channel.send(
+                "**Available commands:**\n" +
+                "\n".join([c.__name__.replace("command_", "") for c in commands])
+            )
+
+        for c in commands:
+            if c.__name__.replace("command_", "") == command:
+                await c(arguments, message)
 
 
-# Look in the commands directory and import everything from there
-modules = []
-for pyfile in pathlib.Path("commands").glob('*.py'): # or perhaps 'script*.py'
-    spec = importlib.util.spec_from_file_location(f"{__name__}.imported_{pyfile.stem}" , pyfile)
+# Look in the commands directory and import everything from there starting with command_
+commands = []
+for pyfile in pathlib.Path("commands").glob('*.py'):
+    spec = importlib.util.spec_from_file_location(f"{__name__}.imported_{pyfile.stem}", pyfile)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    modules.append(module)
+
+    for obj_string in dir(module):
+        if obj_string.startswith("command_"):
+            obj_handle = getattr(module, obj_string)
+            if callable(obj_handle):
+                commands.append(obj_handle)
+
 
 client.run(os.getenv("TOKEN"))

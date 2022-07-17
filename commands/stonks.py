@@ -1,7 +1,7 @@
 import yfinance as yf
 
 
-async def stonks(arguments, message):
+async def command_stonks(arguments, message):
     if not arguments[""]:
         await message.channel.send("Usage: !stonks <stock_ticker>")
     else:

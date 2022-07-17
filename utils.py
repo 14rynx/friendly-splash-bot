@@ -2,14 +2,15 @@ import requests
 
 
 def lookup(string, return_type):
-    """Tries to find an ID related to the input
+    """Tries to find an ID related to the input.
+
     Parameters
     ----------
     string : str
-        The sound the animal makes (default is None)
+        The character / corporation / alliance name
     return_type : str
         what kind of id should be tried to match
-        can be character, corporation and alliance
+        can be characters, corporations and alliances
 
     Raises
     ------
@@ -27,10 +28,25 @@ def lookup(string, return_type):
 
 
 def isk(number):
+    """Takes a number and converts it into an ingame-like ISK format string.
+
+    Parameters
+    ----------
+    number : int / float
+        amount of Interstellar Kredits to display
+    """
+
     return format(number, ",.0f").replace(',',"'") + " ISK"
 
 
 def convert(number_string):
+    """Takes a number-string and converts it into a number, taking common abbreviations.
+
+    Parameters
+    ----------
+    number_string : str
+        something like 1b, 15m 10kk
+    """
     exponent = 3 * number_string.lower().count("k") + 6 * number_string.lower().count("m") + 9 * number_string.lower().count("b")
     number = float(number_string.lower().replace("k", "").replace("m", "").replace("b", ""))
     return number * 10 ** exponent

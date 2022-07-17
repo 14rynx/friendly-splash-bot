@@ -1,8 +1,8 @@
-from dependencies.utils import lookup
-from dependencies.corp_statistics import get_corp_statistics
+from utils import lookup
+from commands.corp_statistics import get_corp_statistics
 
 
-async def corp(arguments, message):
+async def command_corp(arguments, message):
 
     name = " ".join(arguments[""])
     id = lookup(name, 'corporations')

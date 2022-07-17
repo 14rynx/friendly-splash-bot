@@ -1,7 +1,7 @@
 import random
 
 
-async def teams(arguments, message):
+async def command_teams(arguments, message):
     pilots = arguments[""]
     team_size = len(pilots) // 2
     random.shuffle(pilots)
