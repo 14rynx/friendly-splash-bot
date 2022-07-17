@@ -53,7 +53,8 @@ class ImplantSet:
 
     def __str__(self):
         newline = "\n"
-        return f"**{self.bonus:.4} efficiency for {isk(self.price)} ** {newline}{newline.join(str(i) for i in self.implants)}"
+        return f"**{self.bonus:.4} stat increase for {isk(self.price)} ** ({isk(self.price / (self.bonus - 1) / 100)} per %) " \
+               f"{newline}{newline.join(str(i) for i in self.implants)}"
 
 
 def combinations(implants):
