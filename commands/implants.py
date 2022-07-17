@@ -84,8 +84,10 @@ class Sorter:
         if item.price == 0:
             return 0
         if self.min_price < item.price < self.max_price:
-            if self.order >= 0:
+            if self.order > 0:
                 return (item.bonus - 1) ** self.order / item.price
+            elif self.order == 0:
+                return item.bonus
             else:
                 return math.exp((item.bonus - 1)) / item.price
         else:
