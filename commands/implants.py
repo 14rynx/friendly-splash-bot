@@ -109,6 +109,10 @@ def get_sorter(arguments):
     return Sorter(convert(arguments[""][0]), convert(arguments[""][1]), scale)
 
 async def command_talismans(arguments, message):
+    if "help" in arguments:
+        await message.channel.send("Usage:\n !talismans <min_price> <max_price> [--grading fixed|linear|quadratic|cubic|exponential]")
+        return
+
     implants = [
         # You declare the implants you want like this
         Implant(33965, 1, set_bonus=1.0101, set_multiplier=1.02),
@@ -139,6 +143,10 @@ async def command_talismans(arguments, message):
 
 
 async def command_asklepians(arguments, message):
+    if "help" in arguments:
+        await message.channel.send("Usage:\n !asklepians <min_price> <max_price> [--grading fixed|linear|quadratic|cubic|exponential]")
+        return
+
     implants = [
         # LG Asklepian
         Implant(42145, 1, set_bonus=1, set_multiplier=1.02),
@@ -190,6 +198,10 @@ async def command_asklepians(arguments, message):
 
 
 async def command_snakes(arguments, message):
+    if "help" in arguments:
+        await message.channel.send("Usage:\n !snakes <min_price> <max_price> [--grading fixed|linear|quadratic|cubic|exponential]")
+        return
+
     implants = [
         # LG Snake
         Implant(33959, 1, set_bonus=0.5, set_multiplier=1.05),
@@ -234,6 +246,10 @@ async def command_snakes(arguments, message):
 
 
 async def command_amulets(arguments, message):
+    if "help" in arguments:
+        await message.channel.send("Usage:\n !amulets <min_price> <max_price> [--grading fixed|linear|quadratic|cubic|exponential]")
+        return
+
     implants = [
         # LG Amulet
         Implant(33953, 1, set_bonus=1, set_multiplier=1.02),

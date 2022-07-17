@@ -162,6 +162,14 @@ def metasolver(state):
 
 
 async def command_roll(arguments, message):
+    if "help" in arguments:
+        await message.channel.send(
+            "Usage:\n!roll <wh_nominal_mass>\n"
+            "--<Ship_name>|-<ship_letter> <mass1> [<mass2>, ...]\n"
+            "[--<ship_name_2>| ...]*"
+        )
+        return
+
     # Todo: Additional Arguments
     wh = State(
         convert(arguments[""][0]),  # already_through_min=2800, already_through_max=2800),

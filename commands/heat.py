@@ -1,4 +1,7 @@
 async def command_heat(arguments, message):
+    if "help" in arguments:
+        await message.channel.send("Usage:\n !heat <total_slots> <guns>")
+        return
 
     total, guns = arguments[""]
     total = int(total)

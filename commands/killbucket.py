@@ -6,6 +6,16 @@ import datetime
 
 
 async def command_killbucket(arguments, message):
+    if "help" in arguments:
+        await message.channel.send(
+            "Usage:\n!killbucket\n"
+            "<character_name>|<character_id> |\n"
+            "-c|--corporation <corporation_name>|<corporation_id>\n"
+            "-a|--alliance <alliance_name>|<alliance_id>\n"
+            "[-d|--days <days_to_querry> | --alltime]"
+        )
+        return
+
     # Config
     character_days = 180
     corporation_days = 30
