@@ -22,7 +22,7 @@ def lookup(string, return_type):
         try:
             response = requests.post('https://esi.evetech.net/latest/universe/ids/?datasource=tranquility&language=en',
                                      json=[string])
-            return response.json()[return_type][0]["id"]
+            return max(response.json()[return_type], key=lambda x: x["id"])["id"]
         except requests.exceptions.RequestException:
             raise ValueError
 
