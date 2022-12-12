@@ -4,11 +4,16 @@ class MessageFunctor:
         self.average = 0
         self.max = 0
 
-    def __call__(self, guns, factor=None):
+    def __call__(self, guns, factor=None, stat_all=False):
         output = calc_heat(guns, factor=factor)
 
-        new_average = sum(output) / len(output)
-        new_max = max(output)
+        if not stat_all:
+            active_only = [a * b for a, b in zip(output, guns)]
+            new_average = sum(active_only) / sum(guns)
+            new_max = max(active_only)
+        else:
+            new_average = sum(output) / len(output)
+            new_max = max(output)
 
         if self.last:
             change_avg = f"({abs(new_average - self.average):.3f} " + (
@@ -60,7 +65,7 @@ def calc_heat(guns, factor=None):
 global functor
 functor = MessageFunctor()
 
-help_message = "Usage:\n !heat <total_slots> <guns> |\n --show <slot-string (X for guns)> [--factor <heat_attenuation>]"
+help_message = "Usage:\n !heat <total_slots> <guns> |\n --show <slot-string (X for guns)> [--factor <heat_attenuation>] [--all | -a]"
 
 
 async def command_heat(arguments, message):
@@ -78,7 +83,9 @@ async def command_heat(arguments, message):
             elif "f" in arguments:
                 factor = float(arguments["f"][0])
 
-            answer = functor(guns, factor=factor)
+            stat_all = "all" in arguments or "a" in arguments
+
+            answer = functor(guns, factor=factor, stat_all=stat_all)
 
             await message.channel.send(answer)
             return
