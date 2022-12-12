@@ -5,7 +5,7 @@ class MessageFunctor:
         self.max = 0
 
     def __call__(self, guns, factor=None):
-        output = calc_heat(guns)
+        output = calc_heat(guns, factor=factor)
 
         new_average = sum(output) / len(output)
         new_max = max(output)
@@ -74,9 +74,9 @@ async def command_heat(arguments, message):
 
             factor = 0
             if "factor" in arguments:
-                factor = arguments["factor"]
+                factor = float(arguments["factor"][0])
             elif "f" in arguments:
-                factor = arguments["f"]
+                factor = float(arguments["f"][0])
 
             answer = functor(guns, factor=factor)
 
@@ -96,4 +96,5 @@ async def command_heat(arguments, message):
             "x" * (guns // 2) + "-" * (empty // 2) + "x" * (guns % 2) + "-" * (empty - empty // 2) + "x" * (guns // 2))
 
     except Exception as e:
+        print(e)
         await message.channel.send(f"Could not use Arguments. " + help_message)
