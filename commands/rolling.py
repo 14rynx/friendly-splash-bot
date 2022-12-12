@@ -161,24 +161,30 @@ def metasolver(state):
     return False, []
 
 
+help_message = "\n".join([
+    "Usage:\n!roll <wh_nominal_mass>",
+    "--<Ship_name>|-<ship_letter> <mass1> [<mass2>, ...]",
+    "[--<ship_name_2>| ...]*"
+])
+
+
 async def command_roll(arguments, message):
     if "help" in arguments:
-        await message.channel.send(
-            "Usage:\n!roll <wh_nominal_mass>\n"
-            "--<Ship_name>|-<ship_letter> <mass1> [<mass2>, ...]\n"
-            "[--<ship_name_2>| ...]*"
-        )
+        await message.channel.send(help_message)
         return
 
-    # Todo: Additional Arguments
-    wh = State(
-        convert(arguments[""][0]),  # already_through_min=2800, already_through_max=2800),
-        [Ship(name, [convert(v) for v in values]) for name, values in arguments.items() if name != ""]
-    )
+    try:
+        # Todo: Additional Arguments
+        wh = State(
+            convert(arguments[""][0]),  # already_through_min=2800, already_through_max=2800),
+            [Ship(name, [convert(v) for v in values]) for name, values in arguments.items() if name != ""]
+        )
 
-    works, path = metasolver(wh)
+        works, path = metasolver(wh)
 
-    if works:
-        await message.channel.send("**It works, as following**\n" + print_path(path))
-    else:
-        await message.channel.send("**Rolling like this is not possible.**")
+        if works:
+            await message.channel.send("**It works, as following**\n" + print_path(path))
+        else:
+            await message.channel.send("**Rolling like this is not possible.**")
+    except Exception as e:
+        await message.channel.send("Could not use this data to calculate a valid rolling solution. " + help_message)

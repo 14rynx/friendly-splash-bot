@@ -1,34 +1,3 @@
-async def command_heat(arguments, message):
-    if "help" in arguments:
-        await message.channel.send("Usage:\n !heat <total_slots> <guns>")
-        return
-
-    if "show" in arguments:
-        guns = [1 if x in "Xx" else 0 for x in arguments["show"][0]]
-
-        factor = 0
-        if "factor" in arguments:
-            factor = arguments["factor"]
-        elif "f" in arguments:
-            factor = arguments["f"]
-
-        answer = functor(guns, factor=factor)
-
-        await message.channel.send(answer)
-        return
-
-    total, guns = arguments[""]
-    total = int(total)
-    guns = int(guns)
-
-    if guns > total:
-        await message.channel.send("More guns than slots doesn't work")
-        return
-
-    empty = int(total - guns)
-    await message.channel.send("x" * (guns // 2) + "-" * (empty // 2) + "x" * (guns%2) + "-" * (empty - empty // 2)  + "x" * (guns // 2) )
-
-
 class MessageFunctor:
     def __init__(self):
         self.last = False
@@ -90,3 +59,41 @@ def calc_heat(guns, factor=None):
 
 global functor
 functor = MessageFunctor()
+
+help_message = "Usage:\n !heat <total_slots> <guns>"
+
+
+async def command_heat(arguments, message):
+    if "help" in arguments:
+        await message.channel.send(help_message)
+        return
+
+    try:
+        if "show" in arguments:
+            guns = [1 if x in "Xx" else 0 for x in arguments["show"][0]]
+
+            factor = 0
+            if "factor" in arguments:
+                factor = arguments["factor"]
+            elif "f" in arguments:
+                factor = arguments["f"]
+
+            answer = functor(guns, factor=factor)
+
+            await message.channel.send(answer)
+            return
+
+        total, guns = arguments[""]
+        total = int(total)
+        guns = int(guns)
+
+        if guns > total:
+            await message.channel.send("More guns than slots doesn't work")
+            return
+
+        empty = int(total - guns)
+        await message.channel.send(
+            "x" * (guns // 2) + "-" * (empty // 2) + "x" * (guns % 2) + "-" * (empty - empty // 2) + "x" * (guns // 2))
+
+    except Exception as e:
+        await message.channel.send(f"Could not use Arguments. " + help_message)
