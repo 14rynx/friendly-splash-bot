@@ -60,7 +60,7 @@ def calc_heat(guns, factor=None):
 global functor
 functor = MessageFunctor()
 
-help_message = "Usage:\n !heat <total_slots> <guns>"
+help_message = "Usage:\n !heat <total_slots> <guns> |\n --show <slot-string (X for guns)> [--factor <heat_attenuation>]"
 
 
 async def command_heat(arguments, message):
