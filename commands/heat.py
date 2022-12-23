@@ -99,8 +99,10 @@ async def command_heat(arguments, message):
             return
 
         empty = int(total - guns)
-        await message.channel.send(
-            "x" * (guns // 2) + "-" * (empty // 2) + "x" * (guns % 2) + "-" * (empty - empty // 2) + "x" * (guns // 2))
+        if guns == 1:
+            await message.channel.send("x" + "-" * (total - 1))
+        else:
+            await message.channel.send("x" * (guns // 2) + "-" * (empty // 2) + "x" * (guns % 2) + "-" * (empty - empty // 2) + "x" * (guns // 2))
 
     except Exception as e:
         print(e)
