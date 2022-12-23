@@ -3,6 +3,10 @@ import importlib.util
 import pathlib
 import os
 
+intent = discord.Intents.default()
+intent.messages = True
+intent.message_content = True
+client = discord.Client(intents=intent)
 
 def parser(message, activation="!", separator=" ", letter_argument="-", word_argument="--"):
     if not message[0] == activation:
@@ -38,9 +42,6 @@ def parser(message, activation="!", separator=" ", letter_argument="-", word_arg
     arguments.update({key: values})
 
     return command.strip(activation), arguments
-
-
-client = discord.Client()
 
 
 @client.event
@@ -80,6 +81,5 @@ for pyfile in pathlib.Path("commands").glob('*.py'):
             obj_handle = getattr(module, obj_string)
             if callable(obj_handle):
                 commands.append(obj_handle)
-
 
 client.run(os.getenv("TOKEN"))
