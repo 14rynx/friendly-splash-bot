@@ -150,8 +150,16 @@ async def command_talismans(arguments, message):
         Implant(19539, 6, set_bonus=0, set_multiplier=1.5),
     ]
 
+    if "count" in arguments:
+        count = int(arguments["count"][0])
+    elif "c" in arguments:
+        count = int(arguments["c"][0])
+    else:
+        count = 3
+
     await asyncio.gather(*[i.fetch() for i in implants])
-    ret = "\n".join(map(str, sorted(combinations(implants), key=get_sorter(arguments), reverse=True)[:3]))
+    sorter = RelationalSorter(convert(arguments[""][0]), convert(arguments[""][1]), combinations(implants))
+    ret = "\n".join(map(str, sorted(combinations(implants), key=sorter, reverse=True)[:count]))
     await message.channel.send(ret)
 
 
@@ -206,10 +214,16 @@ async def command_asklepians(arguments, message):
         Implant(32254, 10, bonus=3)
     ]
 
+    if "count" in arguments:
+        count = int(arguments["count"][0])
+    elif "c" in arguments:
+        count = int(arguments["c"][0])
+    else:
+        count = 3
+
     await asyncio.gather(*[i.fetch() for i in implants])
-    ret = "\n".join(map(str, sorted(combinations(implants),
-                                    key=RelationalSorter(convert(arguments[""][0]), convert(arguments[""][1]),
-                                                         combinations(implants)), reverse=True)[:3]))
+    sorter = RelationalSorter(convert(arguments[""][0]), convert(arguments[""][1]), combinations(implants))
+    ret = "\n".join(map(str, sorted(combinations(implants), key=sorter, reverse=True)[:count]))
     await message.channel.send(ret)
 
 
@@ -257,10 +271,16 @@ async def command_snakes(arguments, message):
         Implant(24663, 8, bonus=5)
     ]
 
+    if "count" in arguments:
+        count = int(arguments["count"][0])
+    elif "c" in arguments:
+        count = int(arguments["c"][0])
+    else:
+        count = 3
+
     await asyncio.gather(*[i.fetch() for i in implants])
-    ret = "\n".join(map(str, sorted(combinations(implants),
-                                    key=RelationalSorter(convert(arguments[""][0]), convert(arguments[""][1]),
-                                                         combinations(implants)), reverse=True)[:3]))
+    sorter = RelationalSorter(convert(arguments[""][0]), convert(arguments[""][1]), combinations(implants))
+    ret = "\n".join(map(str, sorted(combinations(implants), key=sorter, reverse=True)[:count]))
     await message.channel.send(ret)
 
 
@@ -308,8 +328,14 @@ async def command_amulets(arguments, message):
         Implant(32254, 10, bonus=3),
     ]
 
+    if "count" in arguments:
+        count = int(arguments["count"][0])
+    elif "c" in arguments:
+        count = int(arguments["c"][0])
+    else:
+        count = 3
+
     await asyncio.gather(*[i.fetch() for i in implants])
-    ret = "\n".join(map(str, sorted(combinations(implants),
-                                    key=RelationalSorter(convert(arguments[""][0]), convert(arguments[""][1]),
-                                                         combinations(implants)), reverse=True)[:3]))
+    sorter = RelationalSorter(convert(arguments[""][0]), convert(arguments[""][1]), combinations(implants))
+    ret = "\n".join(map(str, sorted(combinations(implants), key=sorter, reverse=True)[:count]))
     await message.channel.send(ret)
