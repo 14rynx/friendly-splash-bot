@@ -23,7 +23,8 @@ class Implant:
             if self.id == 0:
                 self.price = 0
             else:
-                async with session.get(f"https://market.fuzzwork.co.uk/aggregates/?region=10000002&types={self.id}") as response:
+                async with session.get(
+                        f"https://market.fuzzwork.co.uk/aggregates/?region=10000002&types={self.id}") as response:
                     self.price = float((await response.json())[str(self.id)]["sell"]["min"])
                 async with session.get(f"https://esi.evetech.net/latest/universe/types/{self.id}/") as response:
                     self.name = (await response.json())["name"]
@@ -35,6 +36,7 @@ class Implant:
 class ImplantSet:
     def __init__(self, implants):
         self.implants = implants
+        self.relational_efficiency = 0
 
     @property
     def bonus(self):
@@ -53,7 +55,7 @@ class ImplantSet:
 
     def __str__(self):
         newline = "\n"
-        return f"**{self.bonus:.4} stat increase for {isk(self.price)} ** ({isk(self.price / (self.bonus - 1) / 100)} per %) " \
+        return f"**{self.bonus:.4} stat increase for {isk(self.price)} ** ({isk(self.price / (self.bonus - 1) / 100)} per %, {self.relational_efficiency * 100:.4}% efficiency)" \
                f"{newline}{newline.join(str(i) for i in self.implants)}"
 
 
@@ -74,46 +76,54 @@ def combinations(implants):
         yield ImplantSet(x)
 
 
-class Sorter:
-    def __init__(self, min_price, max_price, order=2):
+def interpolate(x1, y1, x2, y2, x_target):
+    dx = x2 - x1
+    rx = x_target - x1
+    dy = y2 - y1
+
+    if dx != 0:
+        return y1 + dy / dx * rx
+    else:
+        return y1
+
+
+class RelationalSorter:
+    def __init__(self, min_price, max_price, all_items):
         self.min_price = min_price
         self.max_price = max_price
-        self.order = order
+
+        # Build list of all options
+        self.best = [(combination.price, combination.bonus) for combination in all_items]
+        self.best = list(sorted(self.best, key=lambda x: x[0]))
+
+        while True:
+            # Find all options that are directly superseeded
+            to_remove = []
+            for index in range(1, len(self.best) - 1):
+                interpolated_bonus = interpolate(*self.best[index - 1], *self.best[index + 1], self.best[index][0])
+                if interpolated_bonus >= self.best[index][1]:
+                    to_remove.append(index)
+
+            if len(to_remove) == 0:
+                break
+
+            # Remove those entries and repeat
+            self.best = [i for j, i in enumerate(self.best) if j not in to_remove]
 
     def __call__(self, item):
-        if item.price == 0:
-            return 0
         if self.min_price < item.price < self.max_price:
-            if self.order > 0:
-                return (item.bonus - 1) ** self.order / item.price
-            elif self.order == 0:
-                return item.bonus
-            else:
-                return math.exp((item.bonus - 1)) / item.price
+            index = next(i for i, val in enumerate(self.best) if val[0] > item.price)
+            interpolated_bonus = interpolate(*self.best[index - 1], *self.best[index], item.price)
+            item.relational_efficiency = item.bonus / interpolated_bonus
+            return item.relational_efficiency
         else:
             return 0
 
-
-def get_sorter(arguments):
-    if "grading" in arguments:
-        if arguments["grading"][0] == "fixed":
-            scale = 0
-        elif arguments["grading"][0] == "linear":
-            scale = 1
-        elif arguments["grading"][0] == "quadratic":
-            scale = 2
-        elif arguments["grading"][0] == "cubic":
-            scale = 3
-        else:
-            scale = -1
-    else:
-        scale = -1
-
-    return Sorter(convert(arguments[""][0]), convert(arguments[""][1]), scale)
 
 async def command_talismans(arguments, message):
     if "help" in arguments:
-        await message.channel.send("Usage:\n !talismans <min_price> <max_price> [--grading fixed|linear|quadratic|cubic|exponential]")
+        await message.channel.send(
+            "Usage:\n !talismans <min_price> <max_price> [--grading fixed|linear|quadratic|cubic|exponential]")
         return
 
     implants = [
@@ -147,7 +157,8 @@ async def command_talismans(arguments, message):
 
 async def command_asklepians(arguments, message):
     if "help" in arguments:
-        await message.channel.send("Usage:\n !asklepians <min_price> <max_price> [--grading fixed|linear|quadratic|cubic|exponential]")
+        await message.channel.send(
+            "Usage:\n !asklepians <min_price> <max_price> [--grading fixed|linear|quadratic|cubic|exponential]")
         return
 
     implants = [
@@ -196,13 +207,16 @@ async def command_asklepians(arguments, message):
     ]
 
     await asyncio.gather(*[i.fetch() for i in implants])
-    ret = "\n".join(map(str, sorted(combinations(implants), key=get_sorter(arguments), reverse=True)[:3]))
+    ret = "\n".join(map(str, sorted(combinations(implants),
+                                    key=RelationalSorter(convert(arguments[""][0]), convert(arguments[""][1]),
+                                                         combinations(implants)), reverse=True)[:3]))
     await message.channel.send(ret)
 
 
 async def command_snakes(arguments, message):
     if "help" in arguments:
-        await message.channel.send("Usage:\n !snakes <min_price> <max_price> [--grading fixed|linear|quadratic|cubic|exponential]")
+        await message.channel.send(
+            "Usage:\n !snakes <min_price> <max_price> [--grading fixed|linear|quadratic|cubic|exponential]")
         return
 
     implants = [
@@ -244,13 +258,16 @@ async def command_snakes(arguments, message):
     ]
 
     await asyncio.gather(*[i.fetch() for i in implants])
-    ret = "\n".join(map(str, sorted(combinations(implants), key=get_sorter(arguments), reverse=True)[:3]))
+    ret = "\n".join(map(str, sorted(combinations(implants),
+                                    key=RelationalSorter(convert(arguments[""][0]), convert(arguments[""][1]),
+                                                         combinations(implants)), reverse=True)[:3]))
     await message.channel.send(ret)
 
 
 async def command_amulets(arguments, message):
     if "help" in arguments:
-        await message.channel.send("Usage:\n !amulets <min_price> <max_price> [--grading fixed|linear|quadratic|cubic|exponential]")
+        await message.channel.send(
+            "Usage:\n !amulets <min_price> <max_price> [--grading fixed|linear|quadratic|cubic|exponential]")
         return
 
     implants = [
@@ -292,5 +309,7 @@ async def command_amulets(arguments, message):
     ]
 
     await asyncio.gather(*[i.fetch() for i in implants])
-    ret = "\n".join(map(str, sorted(combinations(implants), key=get_sorter(arguments), reverse=True)[:3]))
+    ret = "\n".join(map(str, sorted(combinations(implants),
+                                    key=RelationalSorter(convert(arguments[""][0]), convert(arguments[""][1]),
+                                                         combinations(implants)), reverse=True)[:3]))
     await message.channel.send(ret)
