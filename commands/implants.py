@@ -120,12 +120,26 @@ class RelationalSorter:
             return 0
 
 
-async def command_talismans(arguments, message):
+async def send_best(arguments, message, implants, command):
     if "help" in arguments:
         await message.channel.send(
-            "Usage:\n !talismans <min_price> <max_price> [--grading fixed|linear|quadratic|cubic|exponential]")
+            f"Usage:\n !{command} <min_price> <max_price> [--grading fixed|linear|quadratic|cubic|exponential]")
         return
 
+    if "count" in arguments:
+        count = int(arguments["count"][0])
+    elif "c" in arguments:
+        count = int(arguments["c"][0])
+    else:
+        count = 3
+
+    await asyncio.gather(*[i.fetch() for i in implants])
+    sorter = RelationalSorter(convert(arguments[""][0]), convert(arguments[""][1]), combinations(implants))
+    ret = "\n".join(map(str, sorted(combinations(implants), key=sorter, reverse=True)[:count]))
+    await message.channel.send(ret)
+
+
+async def command_talismans(arguments, message):
     implants = [
         # You declare the implants you want like this
         Implant(33965, 1, set_bonus=1.0101, set_multiplier=1.02),
@@ -149,26 +163,10 @@ async def command_talismans(arguments, message):
         Implant(19538, 5, set_bonus=5.0505, set_multiplier=1.15),
         Implant(19539, 6, set_bonus=0, set_multiplier=1.5),
     ]
-
-    if "count" in arguments:
-        count = int(arguments["count"][0])
-    elif "c" in arguments:
-        count = int(arguments["c"][0])
-    else:
-        count = 3
-
-    await asyncio.gather(*[i.fetch() for i in implants])
-    sorter = RelationalSorter(convert(arguments[""][0]), convert(arguments[""][1]), combinations(implants))
-    ret = "\n".join(map(str, sorted(combinations(implants), key=sorter, reverse=True)[:count]))
-    await message.channel.send(ret)
+    await send_best(arguments, message, implants, "talismans")
 
 
 async def command_asklepians(arguments, message):
-    if "help" in arguments:
-        await message.channel.send(
-            "Usage:\n !asklepians <min_price> <max_price> [--grading fixed|linear|quadratic|cubic|exponential]")
-        return
-
     implants = [
         # LG Asklepian
         Implant(42145, 1, set_bonus=1, set_multiplier=1.02),
@@ -213,26 +211,10 @@ async def command_asklepians(arguments, message):
 
         Implant(32254, 10, bonus=3)
     ]
-
-    if "count" in arguments:
-        count = int(arguments["count"][0])
-    elif "c" in arguments:
-        count = int(arguments["c"][0])
-    else:
-        count = 3
-
-    await asyncio.gather(*[i.fetch() for i in implants])
-    sorter = RelationalSorter(convert(arguments[""][0]), convert(arguments[""][1]), combinations(implants))
-    ret = "\n".join(map(str, sorted(combinations(implants), key=sorter, reverse=True)[:count]))
-    await message.channel.send(ret)
+    await send_best(arguments, message, implants, "asklepians")
 
 
 async def command_snakes(arguments, message):
-    if "help" in arguments:
-        await message.channel.send(
-            "Usage:\n !snakes <min_price> <max_price> [--grading fixed|linear|quadratic|cubic|exponential]")
-        return
-
     implants = [
         # LG Snake
         Implant(33959, 1, set_bonus=0.5, set_multiplier=1.05),
@@ -270,26 +252,10 @@ async def command_snakes(arguments, message):
         # Zor's Custom Navigation Hyperlink
         Implant(24663, 8, bonus=5)
     ]
-
-    if "count" in arguments:
-        count = int(arguments["count"][0])
-    elif "c" in arguments:
-        count = int(arguments["c"][0])
-    else:
-        count = 3
-
-    await asyncio.gather(*[i.fetch() for i in implants])
-    sorter = RelationalSorter(convert(arguments[""][0]), convert(arguments[""][1]), combinations(implants))
-    ret = "\n".join(map(str, sorted(combinations(implants), key=sorter, reverse=True)[:count]))
-    await message.channel.send(ret)
+    await send_best(arguments, message, implants, "snakes")
 
 
 async def command_amulets(arguments, message):
-    if "help" in arguments:
-        await message.channel.send(
-            "Usage:\n !amulets <min_price> <max_price> [--grading fixed|linear|quadratic|cubic|exponential]")
-        return
-
     implants = [
         # LG Amulet
         Implant(33953, 1, set_bonus=1, set_multiplier=1.02),
@@ -299,7 +265,7 @@ async def command_amulets(arguments, message):
         Implant(33956, 5, set_bonus=5, set_multiplier=1.02),
         Implant(33958, 6, set_bonus=0, set_multiplier=1.1),
 
-        # MG Asklepian
+        # MG Amulet
         Implant(22119, 1, set_bonus=1, set_multiplier=1.1),
         Implant(22120, 2, set_bonus=2, set_multiplier=1.1),
         Implant(22123, 3, set_bonus=3, set_multiplier=1.1),
@@ -307,7 +273,7 @@ async def command_amulets(arguments, message):
         Implant(22122, 5, set_bonus=5, set_multiplier=1.1),
         Implant(22124, 6, set_bonus=0, set_multiplier=1.25),
 
-        # HG Asklepian
+        # HG Amulet
         Implant(20499, 1, set_bonus=1, set_multiplier=1.15),
         Implant(20501, 2, set_bonus=2, set_multiplier=1.15),
         Implant(20507, 3, set_bonus=3, set_multiplier=1.15),
@@ -327,15 +293,33 @@ async def command_amulets(arguments, message):
         # Imp Navy Noble
         Implant(32254, 10, bonus=3),
     ]
+    await send_best(arguments, message, implants, "amulets")
 
-    if "count" in arguments:
-        count = int(arguments["count"][0])
-    elif "c" in arguments:
-        count = int(arguments["c"][0])
-    else:
-        count = 3
 
-    await asyncio.gather(*[i.fetch() for i in implants])
-    sorter = RelationalSorter(convert(arguments[""][0]), convert(arguments[""][1]), combinations(implants))
-    ret = "\n".join(map(str, sorted(combinations(implants), key=sorter, reverse=True)[:count]))
-    await message.channel.send(ret)
+async def command_crystals(arguments, message):
+    implants = [
+        # LG Crystal
+        Implant(33923, 1, set_bonus=1, set_multiplier=1.02),
+        Implant(33924, 2, set_bonus=2, set_multiplier=1.02),
+        Implant(33927, 3, set_bonus=3, set_multiplier=1.02),
+        Implant(33925, 4, set_bonus=4, set_multiplier=1.02),
+        Implant(33926, 5, set_bonus=5, set_multiplier=1.02),
+        Implant(33928, 6, set_bonus=0, set_multiplier=1.1),
+
+        # MG Crystal
+        Implant(22107, 1, set_bonus=1, set_multiplier=1.1),
+        Implant(22108, 2, set_bonus=2, set_multiplier=1.1),
+        Implant(22111, 3, set_bonus=3, set_multiplier=1.1),
+        Implant(22109, 4, set_bonus=4, set_multiplier=1.1),
+        Implant(22110, 5, set_bonus=5, set_multiplier=1.1),
+        Implant(22112, 6, set_bonus=0, set_multiplier=1.25),
+
+        # HG Crystal
+        Implant(20121, 1, set_bonus=1, set_multiplier=1.15),
+        Implant(20157, 2, set_bonus=2, set_multiplier=1.15),
+        Implant(20158, 3, set_bonus=3, set_multiplier=1.15),
+        Implant(20159, 4, set_bonus=4, set_multiplier=1.15),
+        Implant(20160, 5, set_bonus=5, set_multiplier=1.15),
+        Implant(20161, 6, set_bonus=0, set_multiplier=1.5)
+    ]
+    await send_best(arguments, message, implants, "crystals")
