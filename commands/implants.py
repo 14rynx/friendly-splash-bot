@@ -144,16 +144,16 @@ async def command_talismans(arguments, message):
         # You declare the implants you want like this
         Implant(33965, 1, set_bonus=1.0101, set_multiplier=1.02),
         Implant(33966, 2, set_bonus=2.0202, set_multiplier=1.02),
-        Implant(33967, 3, set_bonus=3.0303, set_multiplier=1.02),
-        Implant(33968, 4, set_bonus=4.0404, set_multiplier=1.02),
-        Implant(33969, 5, set_bonus=5.0505, set_multiplier=1.02),
+        Implant(33969, 3, set_bonus=3.0303, set_multiplier=1.02),
+        Implant(33967, 4, set_bonus=4.0404, set_multiplier=1.02),
+        Implant(33968, 5, set_bonus=5.0505, set_multiplier=1.02),
         Implant(33970, 6, set_bonus=0, set_multiplier=1.1),
         # MG
         Implant(22131, 1, set_bonus=1.0101, set_multiplier=1.1),
         Implant(22133, 2, set_bonus=2.0202, set_multiplier=1.1),
-        Implant(22134, 3, set_bonus=3.0303, set_multiplier=1.1),
-        Implant(22135, 4, set_bonus=4.0404, set_multiplier=1.1),
-        Implant(22136, 5, set_bonus=5.0505, set_multiplier=1.1),
+        Implant(22136, 3, set_bonus=3.0303, set_multiplier=1.1),
+        Implant(22134, 4, set_bonus=4.0404, set_multiplier=1.1),
+        Implant(22135, 5, set_bonus=5.0505, set_multiplier=1.1),
         Implant(22137, 6, set_bonus=0, set_multiplier=1.25),
         # HG
         Implant(19534, 1, set_bonus=1.0101, set_multiplier=1.15),
