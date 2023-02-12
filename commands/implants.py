@@ -1,10 +1,11 @@
-import asyncio
 import aiohttp
-from utils import isk, convert
-import math
-import ssl
+import asyncio
 import certifi
 import itertools
+import math
+import ssl
+
+from utils import isk, convert
 
 
 class Implant:
@@ -282,7 +283,7 @@ async def command_amulets(arguments, message):
         Implant(20509, 6, set_bonus=0, set_multiplier=1.5),
 
         # Noble Hull Upgrades
-        Implant(27074, 10, bonus=1.0101),
+        Implant(27074, 10, bonus=1),
         Implant(3479, 10, bonus=2),
         Implant(13256, 10, bonus=3),
         Implant(3481, 10, bonus=4),
@@ -323,3 +324,32 @@ async def command_crystals(arguments, message):
         Implant(20161, 6, set_bonus=0, set_multiplier=1.5)
     ]
     await send_best(arguments, message, implants, "crystals")
+
+
+async def command_ascendancies(arguments, message):
+    implants = [
+        # MG Ascendancy
+        Implant(33555, 1, set_bonus=1, set_multiplier=1.1),
+        Implant(33557, 2, set_bonus=2, set_multiplier=1.1),
+        Implant(33563, 3, set_bonus=3, set_multiplier=1.1),
+        Implant(33559, 4, set_bonus=4, set_multiplier=1.1),
+        Implant(33561, 5, set_bonus=5, set_multiplier=1.1),
+        Implant(33565, 6, set_bonus=0, set_multiplier=1.35),
+
+        # HG Ascendancy
+        Implant(33516, 1, set_bonus=1, set_multiplier=1.15),
+        Implant(33525, 2, set_bonus=2, set_multiplier=1.15),
+        Implant(33528, 3, set_bonus=3, set_multiplier=1.15),
+        Implant(33526, 4, set_bonus=4, set_multiplier=1.15),
+        Implant(33527, 5, set_bonus=5, set_multiplier=1.15),
+        Implant(33529, 6, set_bonus=0, set_multiplier=1.7),
+
+        # Warpspeed Hardwirings
+        Implant(27115, 6, bonus=5),
+        Implant(3117, 6, bonus=8),
+        Implant(13242, 6, bonus=10),
+        Implant(3118, 6, bonus=13),
+        Implant(27114, 6, bonus=15),
+        Implant(3119, 6, bonus=18),
+    ]
+    await send_best(arguments, message, implants, "ascendancies")
