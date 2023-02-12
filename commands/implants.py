@@ -116,7 +116,7 @@ class RelationalSorter:
             try:
                 index = next(i for i, val in enumerate(self.best) if val[0] > item.price)
             except StopIteration:
-                item.relational_efficiency = 1
+                item.relational_efficiency = 1.0
             else:
                 interpolated_bonus = interpolate(*self.best[index - 1], *self.best[index], item.price)
                 item.relational_efficiency = item.bonus / interpolated_bonus
