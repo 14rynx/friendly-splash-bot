@@ -12,6 +12,10 @@ If you just want to use some script, you can use the bot at the [Friendly-Splash
 This repository serves as a way that you can look at the individual algorithms and things that I have implemented for your own use.
 If you happen to want to mess around with stuff, I still have quite a lot of the original collab scripts uppon requests.
 
+## Inviting the bot to your discord
+
+https://discord.com/api/oauth2/authorize?client_id=903314259092590643&permissions=52224&scope=bot
+
 ## Installing the bot on your own server
 
 1. Git pull the repo
