@@ -1,7 +1,11 @@
 import discord
 import importlib.util
 import pathlib
-import os
+import json
+
+with open('secrets.json', "r") as f:
+    TOKEN = json.loads(f.read())["TOKEN"]
+
 
 intent = discord.Intents.default()
 intent.messages = True
@@ -82,4 +86,4 @@ for pyfile in pathlib.Path("commands").glob('*.py'):
             if callable(obj_handle):
                 commands.append(obj_handle)
 
-client.run(os.getenv("TOKEN"))
+client.run(TOKEN)
