@@ -1,11 +1,11 @@
-import aiohttp
 import asyncio
-import certifi
 import itertools
-import math
 import ssl
 
-from utils import isk, convert
+import aiohttp
+import certifi
+
+from utils import isk, convert, RelationalSorter
 
 
 class Implant:
@@ -56,7 +56,7 @@ class ImplantSet:
 
     def __str__(self):
         newline = "\n"
-        return f"**{self.bonus:.4} stat increase for {isk(self.price)} ** ({isk(self.price / (self.bonus - 1) / 100)} per %, {self.relational_efficiency * 100:.4}% efficiency)" \
+        return f"**{self.bonus:.4} stat increase for {isk(self.price)} ** ({isk(self.price / (self.bonus - 1) / 100)} per %)" \
                f"{newline}{newline.join(str(i) for i in self.implants)}"
 
 
@@ -77,54 +77,6 @@ def combinations(implants):
         yield ImplantSet(x)
 
 
-def interpolate(x1, y1, x2, y2, x_target):
-    dx = x2 - x1
-    rx = x_target - x1
-    dy = y2 - y1
-
-    if dx != 0:
-        return y1 + dy / dx * rx
-    else:
-        return y1
-
-
-class RelationalSorter:
-    def __init__(self, min_price, max_price, all_items):
-        self.min_price = min_price
-        self.max_price = max_price
-
-        # Build list of all options
-        self.best = [(combination.price, combination.bonus) for combination in all_items]
-        self.best = list(sorted(self.best, key=lambda x: x[0]))
-
-        while True:
-            # Find all options that are directly superseeded
-            to_remove = []
-            for index in range(1, len(self.best) - 1):
-                interpolated_bonus = interpolate(*self.best[index - 1], *self.best[index + 1], self.best[index][0])
-                if interpolated_bonus >= self.best[index][1]:
-                    to_remove.append(index)
-
-            if len(to_remove) == 0:
-                break
-
-            # Remove those entries and repeat
-            self.best = [i for j, i in enumerate(self.best) if j not in to_remove]
-
-    def __call__(self, item):
-        if self.min_price < item.price < self.max_price:
-            try:
-                index = next(i for i, val in enumerate(self.best) if val[0] > item.price)
-            except StopIteration:
-                item.relational_efficiency = 1.0
-            else:
-                interpolated_bonus = interpolate(*self.best[index - 1], *self.best[index], item.price)
-                item.relational_efficiency = item.bonus / interpolated_bonus
-            return item.relational_efficiency
-        else:
-            return 0
-
-
 async def send_best(arguments, message, implants, command):
     if "help" in arguments:
         await message.channel.send(
@@ -139,8 +91,11 @@ async def send_best(arguments, message, implants, command):
         count = 3
 
     await asyncio.gather(*[i.fetch() for i in implants])
-    sorter = RelationalSorter(convert(arguments[""][0]), convert(arguments[""][1]), combinations(implants))
-    ret = "\n".join(map(str, sorted(combinations(implants), key=sorter, reverse=True)[:count]))
+    sorter = RelationalSorter([(c.price, c.bonus) for c in combinations(implants)])
+    filtered_combinations = [x for x in combinations(implants) if
+                             convert(arguments[""][0]) <= x.price <= convert(arguments[""][1])]
+    ret = "\n".join(
+        map(str, sorted(filtered_combinations, key=lambda x: sorter((x.price, x.bonus)), reverse=True)[:count]))
     await message.channel.send(ret)
 
 
