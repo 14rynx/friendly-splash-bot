@@ -1,7 +1,7 @@
 import asyncio
 import math
 from dataclasses import dataclass
-
+import itertools
 import aiohttp
 
 from utils import RelationalSorter, get_urls
@@ -21,6 +21,8 @@ class DamageMod:
                 self.cpu = attribute["value"]
             if attribute["attribute_id"] == 64:
                 self.damage = attribute["value"]
+            if attribute["attribute_id"] == 213:
+                self.damage = attribute["value"]
             if attribute["attribute_id"] == 204:
                 self.rof = attribute["value"]
         return self
@@ -35,13 +37,21 @@ class DamageModSet:
         self.damage_mods = damage_mods
 
     @property
-    def damage(self):
-        multiplier = 1
+    def damage_multiplier(self):
+        return self.get_damage_multiplier()
+
+    def get_damage_multiplier(self, base_reload_ratio=1):
+        damage_increase = 1
         for x, value in enumerate(sorted([x.damage for x in self.damage_mods], reverse=True)):
-            multiplier *= (1 + ((value - 1) * self.stacking(x)))
+            damage_increase *= (1 + ((value - 1) * self.stacking(x)))
+
+        rof_time_decrease = 1
         for x, value in enumerate(sorted([x.rof for x in self.damage_mods])):
-            multiplier /= 1 + ((value - 1) * self.stacking(x))
-        return multiplier
+            rof_time_decrease *= 1 + ((value - 1) * self.stacking(x))
+
+        rof_time_decrease = (base_reload_ratio * rof_time_decrease + (1-base_reload_ratio))
+
+        return damage_increase / rof_time_decrease
 
     @property
     def cpu(self):
@@ -52,7 +62,7 @@ class DamageModSet:
         return sum([x.price for x in self.damage_mods])
 
     def __str__(self):
-        return f"CPU: {self.cpu} Damage: {self.damage} Price: {self.price} {[x.identifier for x in self.damage_mods]}"
+        return f"CPU: {self.cpu} Damage: {self.damage_multiplier} Price: {self.price} {[x.identifier for x in self.damage_mods]}"
 
 
 async def get_abyssals_damage_mods(type_id: int):
@@ -119,15 +129,15 @@ def mod_combinations(repeatable_mods, unique_mods, count):
                 yield [m] + y
 
 
-def get_best(unique_mods, repeatable_mods, count, min_price, max_price, max_cpu):
+def get_best(unique_mods, repeatable_mods, count, min_price, max_price, max_cpu, **kwargs):
     sets_all = [DamageModSet(c) for c in mod_combinations(repeatable_mods, unique_mods, count)]
     sets_cpu_limited = [s for s in sets_all if s.cpu < max_cpu]
-    xy = [(c.price, c.damage) for c in sets_cpu_limited]
+    xy = [(c.price, c.get_damage_multiplier(**kwargs)) for c in sets_cpu_limited]
     sets_cpu_price_limited = [s for s in sets_cpu_limited if min_price < s.price < max_price]
 
     sorter = RelationalSorter(xy)
-    for x in sorted(sets_cpu_price_limited, key=lambda c: sorter((c.price, c.damage)), reverse=True):
-        yield x, sorter((x.price, x.damage))
+    for x in sorted(sets_cpu_price_limited, key=lambda c: sorter((c.price, c.get_damage_multiplier(**kwargs))), reverse=True):
+        yield x, sorter((x.price, x.get_damage_multiplier(**kwargs)))
 
 
 async def gyros(count, min_price, max_price, max_cpu):
@@ -142,8 +152,24 @@ async def gyros(count, min_price, max_price, max_cpu):
         DamageMod(20, 1.12, 0.89, *(await get_cheapest([13939, 15806]))),
     ]
 
-    for item, effectiveness in get_best(unique_mods, repeatable_mods, count, min_price, max_price, max_cpu):
+    for item, effectiveness in itertools.islice(get_best(unique_mods, repeatable_mods, count, min_price, max_price, max_cpu), 20):
         print(item, effectiveness)
 
 
-asyncio.run(gyros(4, 100000000, 300000000, 150))
+async def bcs(count, min_price, max_price, max_cpu, **kwargs):
+    unique_mods = [x async for x in get_abyssals_damage_mods(49738)]
+
+    repeatable_mods = [
+        DamageMod(35, 1.07, 0.92, *(await get_cheapest([12274]))),
+        DamageMod(40, 1.10, 0.90, *(await get_cheapest([22291]))),
+        DamageMod(22, 1.1, 0.90, *(await get_cheapest([21484]))),
+        DamageMod(31, 1.08, 0.90, *(await get_cheapest([16457]))),
+        DamageMod(38, 1.1, 0.90, *(await get_cheapest([46270]))),
+        DamageMod(24, 1.12, 0.89, *(await get_cheapest([15681, 13935, 13937, 28563, 15683]))),
+    ]
+
+    for item, effectiveness in itertools.islice(get_best(unique_mods, repeatable_mods, count, min_price, max_price, max_cpu, **kwargs), 20):
+        print(item, effectiveness)
+
+asyncio.run(bcs(3, 100_000_000, 500_000_000, 70, base_reload_ratio=0.720))
+
