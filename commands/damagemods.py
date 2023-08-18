@@ -1,7 +1,7 @@
 import asyncio
 import math
 from dataclasses import dataclass
-import itertools
+
 import aiohttp
 
 from utils import RelationalSorter, get_urls
@@ -108,6 +108,8 @@ async def get_cheapest(item_ids):
         urls = [f"https://market.fuzzwork.co.uk/aggregates/?region=10000002&types={i}" for i in item_ids]
         async for item_prices, item_id in get_urls(urls, session, item_ids):
             item_price = float(item_prices[str(item_id)]["sell"]["min"])
+            if item_price < 100:
+                continue
             if item_price < cheapest_price:
                 cheapest_price = item_price
                 cheapest_id = item_id
@@ -129,47 +131,111 @@ def mod_combinations(repeatable_mods, unique_mods, count):
                 yield [m] + y
 
 
-def get_best(unique_mods, repeatable_mods, count, min_price, max_price, max_cpu, **kwargs):
+def get_best(unique_mods, repeatable_mods, count, min_price, max_price, max_cpu, iterations=20, **kwargs):
     sets_all = [DamageModSet(c) for c in mod_combinations(repeatable_mods, unique_mods, count)]
     sets_cpu_limited = [s for s in sets_all if s.cpu < max_cpu]
     xy = [(c.price, c.get_damage_multiplier(**kwargs)) for c in sets_cpu_limited]
     sets_cpu_price_limited = [s for s in sets_cpu_limited if min_price < s.price < max_price]
 
     sorter = RelationalSorter(xy)
-    for x in sorted(sets_cpu_price_limited, key=lambda c: sorter((c.price, c.get_damage_multiplier(**kwargs))), reverse=True):
+    for x in sorted(sets_cpu_price_limited, key=lambda c: sorter((c.price, c.get_damage_multiplier(**kwargs))), reverse=True)[:iterations]:
         yield x, sorter((x.price, x.get_damage_multiplier(**kwargs)))
 
 
 async def gyros(count, min_price, max_price, max_cpu):
+    print("Fetching contracts (1/3)")
     unique_mods = [x async for x in get_abyssals_damage_mods(49730)]
 
+    print("Fetching normal mods (2/3)")
     repeatable_mods = [
-        DamageMod(16, 1.07, 0.93, *(await get_cheapest([518]))),
-        DamageMod(30, 1.10, 0.90, *(await get_cheapest([519]))),
-        DamageMod(27, 1.07, 0.92, *(await get_cheapest([520]))),
-        DamageMod(18, 1.1, 0.90, *(await get_cheapest([21486]))),
-        DamageMod(25, 1.08, 0.90, *(await get_cheapest([5933]))),
-        DamageMod(20, 1.12, 0.89, *(await get_cheapest([13939, 15806]))),
+        DamageMod(16, 1.07, 0.93, *(await get_cheapest([518]))),  # Basic
+        DamageMod(30, 1.10, 0.90, *(await get_cheapest([519]))),  # T2
+        DamageMod(27, 1.07, 0.92, *(await get_cheapest([520]))),  # T1
+        DamageMod(18, 1.1, 0.90, *(await get_cheapest([21486]))),  # Kindred
+        DamageMod(25, 1.08, 0.90, *(await get_cheapest([5933]))),  # Compact
+        DamageMod(20, 1.12, 0.89, *(await get_cheapest([13939, 15806]))),  # Faction
     ]
 
-    for item, effectiveness in itertools.islice(get_best(unique_mods, repeatable_mods, count, min_price, max_price, max_cpu), 20):
+    print("Finding best Set (3/3)")
+    for item, effectiveness in get_best(unique_mods, repeatable_mods, count, min_price, max_price, max_cpu):
         print(item, effectiveness)
 
 
-async def bcs(count, min_price, max_price, max_cpu, **kwargs):
+async def ballistics(count, min_price, max_price, max_cpu):
+    print("Fetching contracts (1/3)")
     unique_mods = [x async for x in get_abyssals_damage_mods(49738)]
 
+    print("Fetching normal mods (2/3)")
     repeatable_mods = [
-        DamageMod(35, 1.07, 0.92, *(await get_cheapest([12274]))),
-        DamageMod(40, 1.10, 0.90, *(await get_cheapest([22291]))),
-        DamageMod(22, 1.1, 0.90, *(await get_cheapest([21484]))),
-        DamageMod(31, 1.08, 0.90, *(await get_cheapest([16457]))),
-        DamageMod(38, 1.1, 0.90, *(await get_cheapest([46270]))),
-        DamageMod(24, 1.12, 0.89, *(await get_cheapest([15681, 13935, 13937, 28563, 15683]))),
+        DamageMod(22, 1.10, 0.9, *(await get_cheapest([21484]))),  # Full Duplex
+        DamageMod(35, 1.07, 0.92, *(await get_cheapest([12274]))),  # T1
+        DamageMod(31, 1.08, 0.90, *(await get_cheapest([16457]))),  # Compact
+        DamageMod(40, 1.1, 0.90, *(await get_cheapest([22291]))),  # T2
+        DamageMod(38, 1.1, 0.90, *(await get_cheapest([46270]))),  # Kaatara's
+        DamageMod(20, 1.12, 0.89, *(await get_cheapest([15681, 13935, 13937, 28563, 15683]))),  # Faction
     ]
 
-    for item, effectiveness in itertools.islice(get_best(unique_mods, repeatable_mods, count, min_price, max_price, max_cpu, **kwargs), 20):
+    print("Finding best Set (3/3)")
+    for item, effectiveness in get_best(unique_mods, repeatable_mods, count, min_price, max_price, max_cpu):
         print(item, effectiveness)
 
-asyncio.run(bcs(3, 100_000_000, 500_000_000, 70, base_reload_ratio=0.720))
 
+async def heatsinks(count, min_price, max_price, max_cpu):
+    print("Fetching contracts (1/3)")
+    unique_mods = [x async for x in get_abyssals_damage_mods(49726)]
+
+    print("Fetching normal mods (2/3)")
+    repeatable_mods = [
+        DamageMod(35, 1.07, 0.92, *(await get_cheapest([2363]))),  # T1
+        DamageMod(25, 1.08, 0.90, *(await get_cheapest([5849]))),  # Compact
+        DamageMod(30, 1.1, 0.90, *(await get_cheapest([2364]))),  # T2
+        DamageMod(16, 1.07, 0.93, *(await get_cheapest([1893]))),  # Basic
+        DamageMod(18, 1.1, 0.9, *(await get_cheapest([23902]))),  # Trebuchet
+        DamageMod(29, 1.1, 0.9, *(await get_cheapest([23902]))),  # Tahron's
+        DamageMod(20, 1.12, 0.89, *(await get_cheapest([15810, 13943, 15808]))),  # Faction
+    ]
+
+    print("Finding best Set (3/3)")
+    for item, effectiveness in get_best(unique_mods, repeatable_mods, count, min_price, max_price, max_cpu):
+        print(item, effectiveness)
+
+
+async def magstabs(count, min_price, max_price, max_cpu):
+    print("Fetching contracts (1/3)")
+    unique_mods = [x async for x in get_abyssals_damage_mods(49722)]
+
+    print("Fetching normal mods (2/3)")
+    repeatable_mods = [
+        DamageMod(35, 1.07, 0.92, *(await get_cheapest([9944]))),  # T1
+        DamageMod(25, 1.08, 0.90, *(await get_cheapest([5849]))),  # Compact
+        DamageMod(30, 1.1, 0.90, *(await get_cheapest([10190]))),  # T2
+        DamageMod(16, 1.07, 0.93, *(await get_cheapest([10188]))),  # Basic
+        DamageMod(18, 1.1, 0.9, *(await get_cheapest([22919]))),  # Monopoly
+        DamageMod(29, 1.1, 0.9, *(await get_cheapest([44113, 44114]))),  # Kaatara's, Torelle's
+        DamageMod(24, 1.14, 0.9, *(await get_cheapest([15416]))),  # Naiyon's
+        DamageMod(20, 1.12, 0.89, *(await get_cheapest([15895, 13945]))),  # Faction
+    ]
+
+    print("Finding best Set (3/3)")
+    for item, effectiveness in get_best(unique_mods, repeatable_mods, count, min_price, max_price, max_cpu):
+        print(item, effectiveness)
+
+
+async def entropics(count, min_price, max_price, max_cpu):
+    print("Fetching contracts (1/3)")
+    unique_mods = [x async for x in get_abyssals_damage_mods(49734)]
+
+    print("Fetching normal mods (2/3)")
+    repeatable_mods = [
+        DamageMod(27, 1.09, 0.96, *(await get_cheapest([9944]))),  # T1
+        DamageMod(25, 1.10, 0.95, *(await get_cheapest([5849]))),  # Compact
+        DamageMod(30, 1.13, 0.94, *(await get_cheapest([10190]))),  # T2
+        DamageMod(23, 1.14, 0.93, *(await get_cheapest([52244]))),  # Faction
+    ]
+
+    print("Finding best Set (3/3)")
+    for item, effectiveness in get_best(unique_mods, repeatable_mods, count, min_price, max_price, max_cpu):
+        print(item, effectiveness)
+
+
+asyncio.run(ballistics(3, 100000000, 300000000, 84))
