@@ -190,3 +190,15 @@ async def get_urls(urls, session, other_datas=None):
         tasks = [get_url(url, session) for url in urls]
         for task in asyncio.as_completed(tasks):
             yield await task
+
+
+async def get_item_name(type_id, session):
+    async with session.get(f"https://esi.evetech.net/latest/universe/types/{type_id}/") as response:
+        if response.status == 200:
+            return (await response.json(content_type=None))["name"]
+        return f"Type ID: {type_id}"
+
+
+async def get_item_price(type_id, session):
+    async with session.get(f"https://market.fuzzwork.co.uk/aggregates/?region=10000002&types={type_id}") as response:
+        return float((await response.json())[str(type_id)]["sell"]["min"])
