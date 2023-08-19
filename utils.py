@@ -1,10 +1,11 @@
-import requests
 import asyncio
-import aiohttp
-import ssl
-import certifi
 import json
-from datetime import datetime, timedelta
+import ssl
+from datetime import datetime
+
+import aiohttp
+import certifi
+import requests
 
 
 def lookup(string, return_type):
@@ -42,7 +43,7 @@ def isk(number):
         amount of Interstellar Kredits to display
     """
 
-    return format(number, ",.0f").replace(',',"'") + " ISK"
+    return format(number, ",.0f").replace(',', "'") + " ISK"
 
 
 def convert(number_string):
@@ -53,7 +54,8 @@ def convert(number_string):
     number_string : str
         something like 1b, 15m 10kk
     """
-    exponent = 3 * number_string.lower().count("k") + 6 * number_string.lower().count("m") + 9 * number_string.lower().count("b")
+    exponent = 3 * number_string.lower().count("k") + 6 * number_string.lower().count(
+        "m") + 9 * number_string.lower().count("b")
     number = float(number_string.lower().replace("k", "").replace("m", "").replace("b", ""))
     return number * 10 ** exponent
 
@@ -125,3 +127,78 @@ async def gather_kills(zkill_url, start):
                 await asyncio.gather(*tasks)
                 page += 1
     return data
+
+
+class RelationalSorter:
+    @staticmethod
+    def interpolate(x1, y1, x2, y2, x_target):
+        assert (x1 <= x_target <= x2)
+        dx = x2 - x1
+        rx = x_target - x1
+        dy = y2 - y1
+
+        if dx != 0:
+            return y1 + dy / dx * rx
+        else:
+            return y1
+
+    def __init__(self, all_points):
+        self.best = list(sorted(all_points, key=lambda x: x[0]))
+
+        old_len = 0
+        while (old_len != len(self.best)):
+            old_len = len(self.best)
+
+            interpolated_prices = [0] + [
+                RelationalSorter.interpolate(*self.best[i - 1], *self.best[i + 1], self.best[i][0]) for i in
+                range(1, len(self.best) - 1)] + [0]
+            self.best = [i for i, j in zip(self.best, interpolated_prices) if i[1] > j]
+
+    def __call__(self, point):
+        try:
+            index = next(i for i, val in enumerate(self.best) if val[0] > point[0])
+        except StopIteration:
+            return 1.0
+        else:
+            interpolated_bonus = RelationalSorter.interpolate(*self.best[index - 1], *self.best[index], point[0])
+            return point[1] / interpolated_bonus
+
+
+async def get_url(url, session, other_data=None):
+    """returns data from a single url, appends 'other_data' """
+    if other_data:
+        async with session.get(url) as response:
+            try:
+                return await response.json(content_type=None), other_data
+            except json.JSONDecodeError:
+                return [], other_data
+    else:
+        async with session.get(url) as response:
+            try:
+                return await response.json(content_type=None)
+            except json.JSONDecodeError:
+                return []
+
+
+async def get_urls(urls, session, other_datas=None):
+    """returns data from a set of urls as they complete, and correctly matches 'other_datas' to it"""
+    if other_datas:
+        tasks = [get_url(url, session, other_data) for url, other_data in zip(urls, other_datas)]
+        for task in asyncio.as_completed(tasks):
+            yield await task
+    else:
+        tasks = [get_url(url, session) for url in urls]
+        for task in asyncio.as_completed(tasks):
+            yield await task
+
+
+async def get_item_name(type_id, session):
+    async with session.get(f"https://esi.evetech.net/latest/universe/types/{type_id}/") as response:
+        if response.status == 200:
+            return (await response.json(content_type=None))["name"]
+        return f"Type ID: {type_id}"
+
+
+async def get_item_price(type_id, session):
+    async with session.get(f"https://market.fuzzwork.co.uk/aggregates/?region=10000002&types={type_id}") as response:
+        return float((await response.json())[str(type_id)]["sell"]["min"])

@@ -1,37 +1,25 @@
-import aiohttp
-import asyncio
-import certifi
 import itertools
-import math
-import ssl
 
+import aiohttp
+from async_lru import alru_cache
+
+from utils import RelationalSorter
+from utils import get_item_name, get_item_price
 from utils import isk, convert
 
 
 class Implant:
-    def __init__(self, id, slot, set_bonus=0.0, set_multiplier=1.0, bonus=0.0):
-        self.name = "Empty"
+    def __init__(self, id=0, name="", price=0, slot=1, set_bonus=0.0, set_multiplier=1.0, bonus=0.0):
+        self.name = name
         self.slot = slot
         self.id = id
         self.set_bonus = set_bonus
         self.set_multiplier = set_multiplier
         self.bonus = bonus
-        self.price = 0
-
-    async def fetch(self):
-        ssl_context = ssl.create_default_context(cafile=certifi.where())
-        async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context)) as session:
-            if self.id == 0:
-                self.price = 0
-            else:
-                async with session.get(
-                        f"https://market.fuzzwork.co.uk/aggregates/?region=10000002&types={self.id}") as response:
-                    self.price = float((await response.json())[str(self.id)]["sell"]["min"])
-                async with session.get(f"https://esi.evetech.net/latest/universe/types/{self.id}/") as response:
-                    self.name = (await response.json())["name"]
+        self.price = price
 
     def __str__(self):
-        return f"{self.name}"
+        return self.name
 
 
 class ImplantSet:
@@ -56,7 +44,7 @@ class ImplantSet:
 
     def __str__(self):
         newline = "\n"
-        return f"**{self.bonus:.4} stat increase for {isk(self.price)} ** ({isk(self.price / (self.bonus - 1) / 100)} per %, {self.relational_efficiency * 100:.4}% efficiency)" \
+        return f"**{self.bonus:.4} stat increase for {isk(self.price)} ** ({isk(self.price / (self.bonus - 1) / 100)} per %)" \
                f"{newline}{newline.join(str(i) for i in self.implants)}"
 
 
@@ -67,7 +55,6 @@ def combinations(implants):
             slot_dict[implant.slot].append(implant)
         else:
             slot_dict.update({implant.slot: [implant]})
-            slot_dict[implant.slot].append(Implant(0, implant.slot))
 
     total = 1
     for key, value in slot_dict.items():
@@ -77,58 +64,17 @@ def combinations(implants):
         yield ImplantSet(x)
 
 
-def interpolate(x1, y1, x2, y2, x_target):
-    dx = x2 - x1
-    rx = x_target - x1
-    dy = y2 - y1
-
-    if dx != 0:
-        return y1 + dy / dx * rx
-    else:
-        return y1
-
-
-class RelationalSorter:
-    def __init__(self, min_price, max_price, all_items):
-        self.min_price = min_price
-        self.max_price = max_price
-
-        # Build list of all options
-        self.best = [(combination.price, combination.bonus) for combination in all_items]
-        self.best = list(sorted(self.best, key=lambda x: x[0]))
-
-        while True:
-            # Find all options that are directly superseeded
-            to_remove = []
-            for index in range(1, len(self.best) - 1):
-                interpolated_bonus = interpolate(*self.best[index - 1], *self.best[index + 1], self.best[index][0])
-                if interpolated_bonus >= self.best[index][1]:
-                    to_remove.append(index)
-
-            if len(to_remove) == 0:
-                break
-
-            # Remove those entries and repeat
-            self.best = [i for j, i in enumerate(self.best) if j not in to_remove]
-
-    def __call__(self, item):
-        if self.min_price < item.price < self.max_price:
-            try:
-                index = next(i for i, val in enumerate(self.best) if val[0] > item.price)
-            except StopIteration:
-                item.relational_efficiency = 1.0
-            else:
-                interpolated_bonus = interpolate(*self.best[index - 1], *self.best[index], item.price)
-                item.relational_efficiency = item.bonus / interpolated_bonus
-            return item.relational_efficiency
-        else:
-            return 0
+async def get_data(type_id):
+    async with aiohttp.ClientSession() as session:
+        name = await get_item_name(type_id, session)
+        price = await get_item_price(type_id, session)
+        return type_id, name, price
 
 
 async def send_best(arguments, message, implants, command):
     if "help" in arguments:
         await message.channel.send(
-            f"Usage:\n !{command} <min_price> <max_price> [--grading fixed|linear|quadratic|cubic|exponential]")
+            f"Usage:\n !{command} <min_price> <max_price>")
         return
 
     if "count" in arguments:
@@ -138,222 +84,248 @@ async def send_best(arguments, message, implants, command):
     else:
         count = 3
 
-    await asyncio.gather(*[i.fetch() for i in implants])
-    sorter = RelationalSorter(convert(arguments[""][0]), convert(arguments[""][1]), combinations(implants))
-    ret = "\n".join(map(str, sorted(combinations(implants), key=sorter, reverse=True)[:count]))
+    sorter = RelationalSorter([(c.price, c.bonus) for c in combinations(implants)])
+    filtered_combinations = [x for x in combinations(implants) if
+                             convert(arguments[""][0]) <= x.price <= convert(arguments[""][1])]
+    ret = "\n".join(
+        map(str, sorted(filtered_combinations, key=lambda x: sorter((x.price, x.bonus)), reverse=True)[:count]))
     await message.channel.send(ret)
 
 
-async def command_talismans(arguments, message):
-    implants = [
-        # You declare the implants you want like this
-        Implant(33965, 1, set_bonus=1.0101, set_multiplier=1.02),
-        Implant(33966, 2, set_bonus=2.0202, set_multiplier=1.02),
-        Implant(33969, 3, set_bonus=3.0303, set_multiplier=1.02),
-        Implant(33967, 4, set_bonus=4.0404, set_multiplier=1.02),
-        Implant(33968, 5, set_bonus=5.0505, set_multiplier=1.02),
-        Implant(33970, 6, set_bonus=0, set_multiplier=1.1),
-        # MG
-        Implant(22131, 1, set_bonus=1.0101, set_multiplier=1.1),
-        Implant(22133, 2, set_bonus=2.0202, set_multiplier=1.1),
-        Implant(22136, 3, set_bonus=3.0303, set_multiplier=1.1),
-        Implant(22134, 4, set_bonus=4.0404, set_multiplier=1.1),
-        Implant(22135, 5, set_bonus=5.0505, set_multiplier=1.1),
-        Implant(22137, 6, set_bonus=0, set_multiplier=1.25),
-        # HG
-        Implant(19534, 1, set_bonus=1.0101, set_multiplier=1.15),
-        Implant(19535, 2, set_bonus=2.0202, set_multiplier=1.15),
-        Implant(19536, 3, set_bonus=3.0303, set_multiplier=1.15),
-        Implant(19537, 4, set_bonus=4.0404, set_multiplier=1.15),
-        Implant(19538, 5, set_bonus=5.0505, set_multiplier=1.15),
-        Implant(19539, 6, set_bonus=0, set_multiplier=1.5),
+@alru_cache(ttl=1800)
+async def amulets():
+    return [
+        # LG Amulet
+        Implant(*(await get_data(33953)), 1, set_bonus=1, set_multiplier=1.02),
+        Implant(*(await get_data(33954)), 2, set_bonus=2, set_multiplier=1.02),
+        Implant(*(await get_data(33957)), 3, set_bonus=3, set_multiplier=1.02),
+        Implant(*(await get_data(33955)), 4, set_bonus=4, set_multiplier=1.02),
+        Implant(*(await get_data(33956)), 5, set_bonus=5, set_multiplier=1.02),
+        Implant(*(await get_data(33958)), 6, set_bonus=0, set_multiplier=1.1),
+
+        # MG Amulet
+        Implant(*(await get_data(22119)), 1, set_bonus=1, set_multiplier=1.1),
+        Implant(*(await get_data(22120)), 2, set_bonus=2, set_multiplier=1.1),
+        Implant(*(await get_data(22123)), 3, set_bonus=3, set_multiplier=1.1),
+        Implant(*(await get_data(22121)), 4, set_bonus=4, set_multiplier=1.1),
+        Implant(*(await get_data(22122)), 5, set_bonus=5, set_multiplier=1.1),
+        Implant(*(await get_data(22124)), 6, set_bonus=0, set_multiplier=1.25),
+
+        # HG Amulet
+        Implant(*(await get_data(20499)), 1, set_bonus=1, set_multiplier=1.15),
+        Implant(*(await get_data(20501)), 2, set_bonus=2, set_multiplier=1.15),
+        Implant(*(await get_data(20507)), 3, set_bonus=3, set_multiplier=1.15),
+        Implant(*(await get_data(20503)), 4, set_bonus=4, set_multiplier=1.15),
+        Implant(*(await get_data(20505)), 5, set_bonus=5, set_multiplier=1.15),
+        Implant(*(await get_data(20509)), 6, set_bonus=0, set_multiplier=1.5),
+
+        # Noble Hull Upgrades
+        Implant(*(await get_data(27074)), 10, bonus=1),
+        Implant(*(await get_data(3479)), 10, bonus=2),
+        Implant(*(await get_data(13256)), 10, bonus=3),
+        Implant(*(await get_data(3481)), 10, bonus=4),
+        Implant(*(await get_data(19550)), 10, bonus=5),
+        Implant(*(await get_data(3482)), 10, bonus=6),
+        Implant(*(await get_data(21606)), 10, bonus=8),
+
+        # Imp Navy Noble
+        Implant(*(await get_data(32254)), 10, bonus=3),
     ]
-    await send_best(arguments, message, implants, "talismans")
 
 
-async def command_asklepians(arguments, message):
-    implants = [
+@alru_cache(ttl=1800)
+async def ascendancies():
+    return [
+        # MG Ascendancy
+        Implant(*(await get_data(33555)), 1, set_bonus=1, set_multiplier=1.1),
+        Implant(*(await get_data(33557)), 2, set_bonus=2, set_multiplier=1.1),
+        Implant(*(await get_data(33563)), 3, set_bonus=3, set_multiplier=1.1),
+        Implant(*(await get_data(33559)), 4, set_bonus=4, set_multiplier=1.1),
+        Implant(*(await get_data(33561)), 5, set_bonus=5, set_multiplier=1.1),
+        Implant(*(await get_data(33565)), 6, set_bonus=0, set_multiplier=1.35),
+
+        # HG Ascendancy
+        Implant(*(await get_data(33516)), 1, set_bonus=1, set_multiplier=1.15),
+        Implant(*(await get_data(33525)), 2, set_bonus=2, set_multiplier=1.15),
+        Implant(*(await get_data(33528)), 3, set_bonus=3, set_multiplier=1.15),
+        Implant(*(await get_data(33526)), 4, set_bonus=4, set_multiplier=1.15),
+        Implant(*(await get_data(33527)), 5, set_bonus=5, set_multiplier=1.15),
+        Implant(*(await get_data(33529)), 6, set_bonus=0, set_multiplier=1.7),
+
+        # Warpspeed Hardwirings
+        Implant(*(await get_data(27115)), 6, bonus=5),
+        Implant(*(await get_data(3117)), 6, bonus=8),
+        Implant(*(await get_data(13242)), 6, bonus=10),
+        Implant(*(await get_data(3118)), 6, bonus=13),
+        Implant(*(await get_data(27114)), 6, bonus=15),
+        Implant(*(await get_data(3119)), 6, bonus=18),
+    ]
+
+
+@alru_cache(ttl=1800)
+async def asklepians():
+    return [
         # LG Asklepian
-        Implant(42145, 1, set_bonus=1, set_multiplier=1.02),
-        Implant(42146, 2, set_bonus=2, set_multiplier=1.02),
-        Implant(42202, 3, set_bonus=3, set_multiplier=1.02),
-        Implant(42200, 4, set_bonus=4, set_multiplier=1.02),
-        Implant(42201, 5, set_bonus=5, set_multiplier=1.02),
-        Implant(42203, 6, set_bonus=0, set_multiplier=1.1),
+        Implant(*(await get_data(42145)), 1, set_bonus=1, set_multiplier=1.02),
+        Implant(*(await get_data(42146)), 2, set_bonus=2, set_multiplier=1.02),
+        Implant(*(await get_data(42202)), 3, set_bonus=3, set_multiplier=1.02),
+        Implant(*(await get_data(42200)), 4, set_bonus=4, set_multiplier=1.02),
+        Implant(*(await get_data(42201)), 5, set_bonus=5, set_multiplier=1.02),
+        Implant(*(await get_data(42203)), 6, set_bonus=0, set_multiplier=1.1),
 
         # MG Asklepian
-        Implant(42204, 1, set_bonus=1, set_multiplier=1.1),
-        Implant(42205, 2, set_bonus=2, set_multiplier=1.1),
-        Implant(42206, 3, set_bonus=3, set_multiplier=1.1),
-        Implant(42207, 4, set_bonus=4, set_multiplier=1.1),
-        Implant(42208, 5, set_bonus=5, set_multiplier=1.1),
-        Implant(42209, 6, set_bonus=0, set_multiplier=1.25),
+        Implant(*(await get_data(42204)), 1, set_bonus=1, set_multiplier=1.1),
+        Implant(*(await get_data(42205)), 2, set_bonus=2, set_multiplier=1.1),
+        Implant(*(await get_data(42206)), 3, set_bonus=3, set_multiplier=1.1),
+        Implant(*(await get_data(42207)), 4, set_bonus=4, set_multiplier=1.1),
+        Implant(*(await get_data(42208)), 5, set_bonus=5, set_multiplier=1.1),
+        Implant(*(await get_data(42209)), 6, set_bonus=0, set_multiplier=1.25),
 
         # HG Asklepian
-        Implant(42210, 1, set_bonus=1, set_multiplier=1.15),
-        Implant(42211, 2, set_bonus=2, set_multiplier=1.15),
-        Implant(42212, 3, set_bonus=3, set_multiplier=1.15),
-        Implant(42213, 4, set_bonus=4, set_multiplier=1.15),
-        Implant(42214, 5, set_bonus=5, set_multiplier=1.15),
-        Implant(42215, 6, set_bonus=0, set_multiplier=1.5),
+        Implant(*(await get_data(42210)), 1, set_bonus=1, set_multiplier=1.15),
+        Implant(*(await get_data(42211)), 2, set_bonus=2, set_multiplier=1.15),
+        Implant(*(await get_data(42212)), 3, set_bonus=3, set_multiplier=1.15),
+        Implant(*(await get_data(42213)), 4, set_bonus=4, set_multiplier=1.15),
+        Implant(*(await get_data(42214)), 5, set_bonus=5, set_multiplier=1.15),
+        Implant(*(await get_data(42215)), 6, set_bonus=0, set_multiplier=1.5),
 
         # Noble Repair Systems
-        Implant(27070, 6, bonus=1.0101),
-        Implant(3291, 6, bonus=2.0202),
-        Implant(13258, 6, bonus=3.0303),
-        Implant(3292, 6, bonus=4.0404),
-        Implant(19547, 6, bonus=5.0505),
-        Implant(3299, 6, bonus=6.0606),
-        Implant(20358, 6, bonus=7.0707),
+        Implant(*(await get_data(27070)), 6, bonus=1.0101),
+        Implant(*(await get_data(3291)), 6, bonus=2.0202),
+        Implant(*(await get_data(13258)), 6, bonus=3.0303),
+        Implant(*(await get_data(3292)), 6, bonus=4.0404),
+        Implant(*(await get_data(19547)), 6, bonus=5.0505),
+        Implant(*(await get_data(3299)), 6, bonus=6.0606),
+        Implant(*(await get_data(20358)), 6, bonus=7.0707),
 
         # Noble Repair Systems
-        Implant(27073, 9, bonus=1),
-        Implant(3476, 9, bonus=2),
-        Implant(19684, 9, bonus=3),
-        Implant(3477, 9, bonus=4),
-        Implant(19685, 9, bonus=5),
-        Implant(3478, 9, bonus=6),
+        Implant(*(await get_data(27073)), 9, bonus=1),
+        Implant(*(await get_data(3476)), 9, bonus=2),
+        Implant(*(await get_data(19684)), 9, bonus=3),
+        Implant(*(await get_data(3477)), 9, bonus=4),
+        Implant(*(await get_data(19685)), 9, bonus=5),
+        Implant(*(await get_data(3478)), 9, bonus=6),
 
-        Implant(32254, 10, bonus=3)
+        Implant(*(await get_data(32254)), 10, bonus=3)
     ]
-    await send_best(arguments, message, implants, "asklepians")
 
 
-async def command_snakes(arguments, message):
-    implants = [
+@alru_cache(ttl=1800)
+async def crystals():
+    return [
+        # LG Crystal
+        Implant(*(await get_data(33923)), 1, set_bonus=1, set_multiplier=1.02),
+        Implant(*(await get_data(33924)), 2, set_bonus=2, set_multiplier=1.02),
+        Implant(*(await get_data(33927)), 3, set_bonus=3, set_multiplier=1.02),
+        Implant(*(await get_data(33925)), 4, set_bonus=4, set_multiplier=1.02),
+        Implant(*(await get_data(33926)), 5, set_bonus=5, set_multiplier=1.02),
+        Implant(*(await get_data(33928)), 6, set_bonus=0, set_multiplier=1.1),
+
+        # MG Crystal
+        Implant(*(await get_data(22107)), 1, set_bonus=1, set_multiplier=1.1),
+        Implant(*(await get_data(22108)), 2, set_bonus=2, set_multiplier=1.1),
+        Implant(*(await get_data(22111)), 3, set_bonus=3, set_multiplier=1.1),
+        Implant(*(await get_data(22109)), 4, set_bonus=4, set_multiplier=1.1),
+        Implant(*(await get_data(22110)), 5, set_bonus=5, set_multiplier=1.1),
+        Implant(*(await get_data(22112)), 6, set_bonus=0, set_multiplier=1.25),
+
+        # HG Crystal
+        Implant(*(await get_data(20121)), 1, set_bonus=1, set_multiplier=1.15),
+        Implant(*(await get_data(20157)), 2, set_bonus=2, set_multiplier=1.15),
+        Implant(*(await get_data(20158)), 3, set_bonus=3, set_multiplier=1.15),
+        Implant(*(await get_data(20159)), 4, set_bonus=4, set_multiplier=1.15),
+        Implant(*(await get_data(20160)), 5, set_bonus=5, set_multiplier=1.15),
+        Implant(*(await get_data(20161)), 6, set_bonus=0, set_multiplier=1.5)
+    ]
+
+
+@alru_cache(ttl=1800)
+async def snakes():
+    return [
         # LG Snake
-        Implant(33959, 1, set_bonus=0.5, set_multiplier=1.05),
-        Implant(33960, 2, set_bonus=0.62, set_multiplier=1.05),
-        Implant(33963, 3, set_bonus=0.75, set_multiplier=1.05),
-        Implant(33961, 4, set_bonus=0.88, set_multiplier=1.05),
-        Implant(33962, 5, set_bonus=1, set_multiplier=1.05),
-        Implant(33964, 6, set_bonus=0, set_multiplier=2.1),
+        Implant(*(await get_data(33959)), 1, set_bonus=0.5, set_multiplier=1.05),
+        Implant(*(await get_data(33960)), 2, set_bonus=0.62, set_multiplier=1.05),
+        Implant(*(await get_data(33963)), 3, set_bonus=0.75, set_multiplier=1.05),
+        Implant(*(await get_data(33961)), 4, set_bonus=0.88, set_multiplier=1.05),
+        Implant(*(await get_data(33962)), 5, set_bonus=1, set_multiplier=1.05),
+        Implant(*(await get_data(33964)), 6, set_bonus=0, set_multiplier=2.1),
 
         # MG Snake
-        Implant(22125, 1, set_bonus=0.5, set_multiplier=1.1),
-        Implant(22126, 2, set_bonus=0.62, set_multiplier=1.1),
-        Implant(22129, 3, set_bonus=0.75, set_multiplier=1.1),
-        Implant(22127, 4, set_bonus=0.88, set_multiplier=1.1),
-        Implant(22128, 5, set_bonus=1, set_multiplier=1.1),
-        Implant(22130, 6, set_bonus=0, set_multiplier=2.5),
+        Implant(*(await get_data(22125)), 1, set_bonus=0.5, set_multiplier=1.1),
+        Implant(*(await get_data(22126)), 2, set_bonus=0.62, set_multiplier=1.1),
+        Implant(*(await get_data(22129)), 3, set_bonus=0.75, set_multiplier=1.1),
+        Implant(*(await get_data(22127)), 4, set_bonus=0.88, set_multiplier=1.1),
+        Implant(*(await get_data(22128)), 5, set_bonus=1, set_multiplier=1.1),
+        Implant(*(await get_data(22130)), 6, set_bonus=0, set_multiplier=2.5),
 
         # HG Snake
-        Implant(19540, 1, set_bonus=0.5, set_multiplier=1.15),
-        Implant(19551, 2, set_bonus=0.62, set_multiplier=1.15),
-        Implant(19553, 3, set_bonus=0.75, set_multiplier=1.15),
-        Implant(19554, 4, set_bonus=0.88, set_multiplier=1.15),
-        Implant(19555, 5, set_bonus=1, set_multiplier=1.15),
-        Implant(19556, 6, set_bonus=0, set_multiplier=3),
+        Implant(*(await get_data(19540)), 1, set_bonus=0.5, set_multiplier=1.15),
+        Implant(*(await get_data(19551)), 2, set_bonus=0.62, set_multiplier=1.15),
+        Implant(*(await get_data(19553)), 3, set_bonus=0.75, set_multiplier=1.15),
+        Implant(*(await get_data(19554)), 4, set_bonus=0.88, set_multiplier=1.15),
+        Implant(*(await get_data(19555)), 5, set_bonus=1, set_multiplier=1.15),
+        Implant(*(await get_data(19556)), 6, set_bonus=0, set_multiplier=3),
 
         # Navigation Implants
-        Implant(27097, 6, bonus=1),
-        Implant(3096, 6, bonus=2),
-        Implant(13237, 6, bonus=3),
-        Implant(3097, 6, bonus=4),
-        Implant(16003, 6, bonus=5),
-        Implant(3100, 6, bonus=6),
-        Implant(24669, 6, bonus=8),
+        Implant(*(await get_data(27097)), 6, bonus=1),
+        Implant(*(await get_data(3096)), 6, bonus=2),
+        Implant(*(await get_data(13237)), 6, bonus=3),
+        Implant(*(await get_data(3097)), 6, bonus=4),
+        Implant(*(await get_data(16003)), 6, bonus=5),
+        Implant(*(await get_data(3100)), 6, bonus=6),
+        Implant(*(await get_data(24669)), 6, bonus=8),
 
         # Zor's Custom Navigation Hyperlink
-        Implant(24663, 8, bonus=5)
+        Implant(*(await get_data(24663)), 8, bonus=5)
     ]
-    await send_best(arguments, message, implants, "snakes")
+
+
+@alru_cache(ttl=1800)
+async def talismans():
+    return [
+        # You declare the implants you want like this
+        Implant(*(await get_data(33965)), 1, set_bonus=1.0101, set_multiplier=1.02),
+        Implant(*(await get_data(33966)), 2, set_bonus=2.0202, set_multiplier=1.02),
+        Implant(*(await get_data(33969)), 3, set_bonus=3.0303, set_multiplier=1.02),
+        Implant(*(await get_data(33967)), 4, set_bonus=4.0404, set_multiplier=1.02),
+        Implant(*(await get_data(33968)), 5, set_bonus=5.0505, set_multiplier=1.02),
+        Implant(*(await get_data(33970)), 6, set_bonus=0, set_multiplier=1.1),
+        # MG
+        Implant(*(await get_data(22131)), 1, set_bonus=1.0101, set_multiplier=1.1, ),
+        Implant(*(await get_data(22133)), 2, set_bonus=2.0202, set_multiplier=1.1, ),
+        Implant(*(await get_data(22136)), 3, set_bonus=3.0303, set_multiplier=1.1, ),
+        Implant(*(await get_data(22134)), 4, set_bonus=4.0404, set_multiplier=1.1, ),
+        Implant(*(await get_data(22135)), 5, set_bonus=5.0505, set_multiplier=1.1, ),
+        Implant(*(await get_data(22137)), 6, set_bonus=0, set_multiplier=1.25, ),
+        # HG
+        Implant(*(await get_data(19534)), 1, set_bonus=1.0101, set_multiplier=1.15, ),
+        Implant(*(await get_data(19535)), 2, set_bonus=2.0202, set_multiplier=1.15, ),
+        Implant(*(await get_data(19536)), 3, set_bonus=3.0303, set_multiplier=1.15, ),
+        Implant(*(await get_data(19537)), 4, set_bonus=4.0404, set_multiplier=1.15, ),
+        Implant(*(await get_data(19538)), 5, set_bonus=5.0505, set_multiplier=1.15, ),
+        Implant(*(await get_data(19539)), 6, set_bonus=0, set_multiplier=1.5, ),
+    ]
 
 
 async def command_amulets(arguments, message):
-    implants = [
-        # LG Amulet
-        Implant(33953, 1, set_bonus=1, set_multiplier=1.02),
-        Implant(33954, 2, set_bonus=2, set_multiplier=1.02),
-        Implant(33957, 3, set_bonus=3, set_multiplier=1.02),
-        Implant(33955, 4, set_bonus=4, set_multiplier=1.02),
-        Implant(33956, 5, set_bonus=5, set_multiplier=1.02),
-        Implant(33958, 6, set_bonus=0, set_multiplier=1.1),
-
-        # MG Amulet
-        Implant(22119, 1, set_bonus=1, set_multiplier=1.1),
-        Implant(22120, 2, set_bonus=2, set_multiplier=1.1),
-        Implant(22123, 3, set_bonus=3, set_multiplier=1.1),
-        Implant(22121, 4, set_bonus=4, set_multiplier=1.1),
-        Implant(22122, 5, set_bonus=5, set_multiplier=1.1),
-        Implant(22124, 6, set_bonus=0, set_multiplier=1.25),
-
-        # HG Amulet
-        Implant(20499, 1, set_bonus=1, set_multiplier=1.15),
-        Implant(20501, 2, set_bonus=2, set_multiplier=1.15),
-        Implant(20507, 3, set_bonus=3, set_multiplier=1.15),
-        Implant(20503, 4, set_bonus=4, set_multiplier=1.15),
-        Implant(20505, 5, set_bonus=5, set_multiplier=1.15),
-        Implant(20509, 6, set_bonus=0, set_multiplier=1.5),
-
-        # Noble Hull Upgrades
-        Implant(27074, 10, bonus=1),
-        Implant(3479, 10, bonus=2),
-        Implant(13256, 10, bonus=3),
-        Implant(3481, 10, bonus=4),
-        Implant(19550, 10, bonus=5),
-        Implant(3482, 10, bonus=6),
-        Implant(21606, 10, bonus=8),
-
-        # Imp Navy Noble
-        Implant(32254, 10, bonus=3),
-    ]
-    await send_best(arguments, message, implants, "amulets")
-
-
-async def command_crystals(arguments, message):
-    implants = [
-        # LG Crystal
-        Implant(33923, 1, set_bonus=1, set_multiplier=1.02),
-        Implant(33924, 2, set_bonus=2, set_multiplier=1.02),
-        Implant(33927, 3, set_bonus=3, set_multiplier=1.02),
-        Implant(33925, 4, set_bonus=4, set_multiplier=1.02),
-        Implant(33926, 5, set_bonus=5, set_multiplier=1.02),
-        Implant(33928, 6, set_bonus=0, set_multiplier=1.1),
-
-        # MG Crystal
-        Implant(22107, 1, set_bonus=1, set_multiplier=1.1),
-        Implant(22108, 2, set_bonus=2, set_multiplier=1.1),
-        Implant(22111, 3, set_bonus=3, set_multiplier=1.1),
-        Implant(22109, 4, set_bonus=4, set_multiplier=1.1),
-        Implant(22110, 5, set_bonus=5, set_multiplier=1.1),
-        Implant(22112, 6, set_bonus=0, set_multiplier=1.25),
-
-        # HG Crystal
-        Implant(20121, 1, set_bonus=1, set_multiplier=1.15),
-        Implant(20157, 2, set_bonus=2, set_multiplier=1.15),
-        Implant(20158, 3, set_bonus=3, set_multiplier=1.15),
-        Implant(20159, 4, set_bonus=4, set_multiplier=1.15),
-        Implant(20160, 5, set_bonus=5, set_multiplier=1.15),
-        Implant(20161, 6, set_bonus=0, set_multiplier=1.5)
-    ]
-    await send_best(arguments, message, implants, "crystals")
+    await send_best(arguments, message, await amulets(), "amulets")
 
 
 async def command_ascendancies(arguments, message):
-    implants = [
-        # MG Ascendancy
-        Implant(33555, 1, set_bonus=1, set_multiplier=1.1),
-        Implant(33557, 2, set_bonus=2, set_multiplier=1.1),
-        Implant(33563, 3, set_bonus=3, set_multiplier=1.1),
-        Implant(33559, 4, set_bonus=4, set_multiplier=1.1),
-        Implant(33561, 5, set_bonus=5, set_multiplier=1.1),
-        Implant(33565, 6, set_bonus=0, set_multiplier=1.35),
+    await send_best(arguments, message, await ascendancies(), "ascendancies")
 
-        # HG Ascendancy
-        Implant(33516, 1, set_bonus=1, set_multiplier=1.15),
-        Implant(33525, 2, set_bonus=2, set_multiplier=1.15),
-        Implant(33528, 3, set_bonus=3, set_multiplier=1.15),
-        Implant(33526, 4, set_bonus=4, set_multiplier=1.15),
-        Implant(33527, 5, set_bonus=5, set_multiplier=1.15),
-        Implant(33529, 6, set_bonus=0, set_multiplier=1.7),
 
-        # Warpspeed Hardwirings
-        Implant(27115, 6, bonus=5),
-        Implant(3117, 6, bonus=8),
-        Implant(13242, 6, bonus=10),
-        Implant(3118, 6, bonus=13),
-        Implant(27114, 6, bonus=15),
-        Implant(3119, 6, bonus=18),
-    ]
-    await send_best(arguments, message, implants, "ascendancies")
+async def command_asklepians(arguments, message):
+    await send_best(arguments, message, await asklepians(), "asklepians")
+
+
+async def command_crystals(arguments, message):
+    await send_best(arguments, message, await crystals(), "crystals")
+
+
+async def command_snakes(arguments, message):
+    await send_best(arguments, message, await snakes(), "snakes")
+
+
+async def command_talismans(arguments, message):
+    await send_best(arguments, message, await talismans(), "talismans")
