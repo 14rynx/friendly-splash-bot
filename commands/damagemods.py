@@ -310,11 +310,11 @@ async def magstabs_repeatable():
 
 
 async def command_ballistics(arguments, message):
-    await send_best(arguments, message, "gyros", ballistics_unique, ballistics_repeatable)
+    await send_best(arguments, message, "ballistics", ballistics_unique, ballistics_repeatable)
 
 
 async def command_entropics(arguments, message):
-    await send_best(arguments, message, "gyros", entropics_unique, entropics_repeatable)
+    await send_best(arguments, message, "entropics", entropics_unique, entropics_repeatable)
 
 
 async def command_gyros(arguments, message):
@@ -322,8 +322,8 @@ async def command_gyros(arguments, message):
 
 
 async def command_heatsinks(arguments, message):
-    await send_best(arguments, message, "gyros", heatsinks_unique, heatsinks_repeatable)
+    await send_best(arguments, message, "heatsinks", heatsinks_unique, heatsinks_repeatable)
 
 
 async def command_magstabs(arguments, message):
-    await send_best(arguments, message, "gyros", magstabs_unique, magstabs_repeatable)
+    await send_best(arguments, message, "magstabs", magstabs_unique, magstabs_repeatable)
