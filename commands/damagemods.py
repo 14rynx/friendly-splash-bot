@@ -256,7 +256,7 @@ async def ballistics_repeatable():
         DamageMod(31, 1.08, 0.90, *(await get_cheapest([16457]))),  # Compact
         DamageMod(40, 1.1, 0.90, *(await get_cheapest([22291]))),  # T2
         DamageMod(38, 1.1, 0.90, *(await get_cheapest([46270]))),  # Kaatara's
-        DamageMod(20, 1.12, 0.89, *(await get_cheapest([15681, 13935, 13937, 28563, 15683]))),  # Faction
+        DamageMod(24, 1.12, 0.89, *(await get_cheapest([15681, 13935, 13937, 28563, 15683]))),  # Faction
     ]
 
 
