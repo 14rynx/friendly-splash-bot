@@ -263,9 +263,9 @@ async def ballistics_repeatable():
 @alru_cache(ttl=1800)
 async def entropics_repeatable():
     return [
-        DamageMod(27, 1.09, 0.96, *(await get_cheapest([9944]))),  # T1
-        DamageMod(25, 1.10, 0.95, *(await get_cheapest([5849]))),  # Compact
-        DamageMod(30, 1.13, 0.94, *(await get_cheapest([10190]))),  # T2
+        DamageMod(27, 1.09, 0.96, *(await get_cheapest([47908]))),  # T1
+        DamageMod(25, 1.10, 0.95, *(await get_cheapest([47909]))),  # Compact
+        DamageMod(30, 1.13, 0.94, *(await get_cheapest([47911]))),  # T2
         DamageMod(23, 1.14, 0.93, *(await get_cheapest([52244]))),  # Faction
     ]
 
