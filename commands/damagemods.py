@@ -114,8 +114,12 @@ async def get_abyssals_damage_mods(type_id: int):
                 if not c_items:
                     continue
 
-                # Sort out plex contracts
-                if 44992 in [int(item["type_id"]) for item in c_items if "type_id" in item]:
+                # Sort out contracts for 0 ISK
+                if c_price == 0:
+                    continue
+
+                # Sort out any contracts asking for some item (item not is_included = True in the contract)
+                if not all([bool(item["is_included"]) for item in c_items if "is_included" in item]):
                     continue
 
                 i_ids = [(item['type_id'], item['item_id']) for item in c_items if
