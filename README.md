@@ -30,7 +30,7 @@ Please note that some of these commands are somewhat computationally (or network
 6. Invite the bot to your discord server with 52224 as permission in the invite link. 
  It should look something like this: `https://discord.com/api/oauth2/authorize?client_id=___something____&permissions=52224&scope=bot`
 
-## Installing the bot on your own server
+### Customization
 
 If you want to remove commands, you can simply remove the files you don't need in `commands/` and restart the bot.
 For adding new ones, use the same structure of function as in the current commands: 
@@ -50,7 +50,8 @@ def command_something(arguments: dict, message: DiscordMessage):
 - !heat (gives you the best heating layout for some amount of highslots)
 - !blob-factor (the infamous one)
 - !nano-factor
-- !corp-stats
-- !snakes, !crystals ... (gives you pareto-optimal implant sets for a price range)
+- !corp-stats (Gives you a quick summary of timezone and size of a corp)
+- !amuets, !ascendancies, !asklepians, !crystals, !snakes, !talismans (gives you pareto-optimal implant sets for a price range, including hardiwirings)
+- !gyros, !magstabs, !entropics, !ballistics, !heatsinks (gives you a pareto optimal set of damage mods with the abyssals currently on contract)
 
 All commands take --help to show their arguments, and a bot takes !help to to show you all commands on that instance of the bot.
