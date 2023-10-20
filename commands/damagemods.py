@@ -64,13 +64,30 @@ class DamageModSet:
     def damage_multiplier(self):
         return self.get_damage_multiplier()
 
-    def get_damage_multiplier(self, uptime=1):
+    def get_damage_multiplier(self, uptime=1, rof_rig="", damage_rig=""):
+
+        damage_multipliers = [x.damage for x in self.damage_mods]
+        if damage_rig.lower() == "t1":
+            damage_multipliers.append(1.1)
+        if damage_rig.lower() == "t2":
+            damage_multipliers.append(1.15)
+        if damage_rig.lower() == "t1x2":
+            damage_multipliers.extend([1.1, 1.1])
+
         damage_increase = 1
-        for x, value in enumerate(sorted([x.damage for x in self.damage_mods], reverse=True)):
+        for x, value in enumerate(sorted(damage_multipliers, reverse=True)):
             damage_increase *= (1 + ((value - 1) * self.stacking(x)))
 
+        rof_multipliers = [x.rof for x in self.damage_mods]
+        if rof_rig.lower() == "t1":
+            rof_multipliers.append(1 / 1.1)
+        if rof_rig.lower() == "t2":
+            rof_multipliers.append(1 / 1.15)
+        if rof_rig.lower() == "t1x2":
+            rof_multipliers.extend([1 / 1.1, 1 / 1.1])
+
         rof_time_decrease = 1
-        for x, value in enumerate(sorted([x.rof for x in self.damage_mods])):
+        for x, value in enumerate(sorted(rof_multipliers)):
             rof_time_decrease *= 1 + ((value - 1) * self.stacking(x))
 
         rof_time_decrease = (uptime * rof_time_decrease + (1 - uptime))
@@ -165,21 +182,33 @@ def mod_combinations(repeatable_mods, unique_mods, count):
                 yield [m] + y
 
 
-def get_best(unique_mods, repeatable_mods, count, min_price, max_price, max_cpu, iterations=5, **kwargs):
-    sets_all = [DamageModSet(c) for c in mod_combinations(repeatable_mods, unique_mods, count)]
-    sets_cpu_limited = [s for s in sets_all if s.cpu < max_cpu]
-    xy = [(c.price, c.get_damage_multiplier(**kwargs)) for c in sets_cpu_limited]
-    sets_cpu_price_limited = [s for s in sets_cpu_limited if min_price < s.price < max_price]
+def xy_points(unique_mods, repeatable_mods, count, max_cpu, **kwargs):
+    for combination in mod_combinations(repeatable_mods, unique_mods, count):
+        damage_mod_set = DamageModSet(combination)
+        if damage_mod_set.cpu < max_cpu:
+            yield damage_mod_set.price, damage_mod_set.get_damage_multiplier(**kwargs)
 
-    sorter = RelationalSorter(xy)
+
+def restricted_sets(unique_mods, repeatable_mods, count, min_price, max_price, max_cpu):
+    for combination in mod_combinations(repeatable_mods, unique_mods, count):
+        damage_mod_set = DamageModSet(combination)
+        if damage_mod_set.cpu < max_cpu:
+            if min_price < damage_mod_set.price < max_price:
+                yield damage_mod_set
+
+
+def get_best(unique_mods, repeatable_mods, count, min_price, max_price, max_cpu, results=5, **kwargs):
+    sorter = RelationalSorter(xy_points(unique_mods, repeatable_mods, count, max_cpu, **kwargs))
+    sets_cpu_price_limited = restricted_sets(unique_mods, repeatable_mods, count, min_price, max_price, max_cpu)
     for x in sorted(sets_cpu_price_limited, key=lambda c: sorter((c.price, c.get_damage_multiplier(**kwargs))),
-                    reverse=True)[:iterations]:
+                    reverse=True)[:results]:
         yield x, sorter((x.price, x.get_damage_multiplier(**kwargs)))
 
 
 async def send_help_message(message, command):
     await message.channel.send(
-        f"Usage:\n !{command} <slots> <max_cpu> <min_price> <max_price>")
+        f"Usage:\n !{command} <slots> <max_cpu> <min_price> <max_price> \n"
+        f"[-u|--uptime <value>] [-c|--count <value>] [-r | -rof_rig <t1, t2, t1x2>] [-d | -damage_rig <t1, t2, t1x2>]")
     return
 
 
@@ -210,6 +239,20 @@ async def send_best(arguments, message, command, unique_getter, repeatable_gette
         else:
             uptime = 1.0
 
+        if "rof_rig" in arguments:
+            rof_rig = arguments["rof_rig"][0]
+        elif "r" in arguments:
+            rof_rig = arguments["r"][0]
+        else:
+            rof_rig = ""
+
+        if "damage_rig" in arguments:
+            damage_rig = arguments["damage_rig"][0]
+        elif "d" in arguments:
+            damage_rig = arguments["d"][0]
+        else:
+            damage_rig = ""
+
         await message.channel.send("Fetching normal modules...")
         repeatable_mods = await repeatable_getter()
 
@@ -217,8 +260,10 @@ async def send_best(arguments, message, command, unique_getter, repeatable_gette
         unique_mods = await unique_getter()
 
         ret = ""
-        for itemset, effectiveness in get_best(unique_mods, repeatable_mods, slots, min_prie, max_price, max_cpu,
-                                               iterations=count, uptime=uptime):
+        for itemset, effectiveness in get_best(
+                unique_mods, repeatable_mods, slots, min_prie, max_price, max_cpu,
+                results=count, uptime=uptime, rof_rig=rof_rig, damage_rig=damage_rig
+        ):
             ret += await itemset.async_str(effectiveness)
 
         if ret == "":
