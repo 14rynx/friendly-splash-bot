@@ -1,18 +1,19 @@
+import asyncio
 import itertools
 
 import aiohttp
 from async_lru import alru_cache
 
-from utils import RelationalSorter
+from utils import RelationalSorter, get_item_attributes
 from utils import get_item_name, get_item_price
 from utils import isk, convert
 
 
 class Implant:
-    def __init__(self, id=0, name="", price=0, slot=1, set_bonus=0.0, set_multiplier=1.0, bonus=0.0):
+    def __init__(self, type_id=0, name="empty", price=0, slot=1, set_bonus=0.0, set_multiplier=1.0, bonus=0.0):
         self.name = name
         self.slot = slot
-        self.id = id
+        self.type_id = type_id
         self.set_bonus = set_bonus
         self.set_multiplier = set_multiplier
         self.bonus = bonus
@@ -49,26 +50,54 @@ class ImplantSet:
 
 
 def combinations(implants):
-    slot_dict = {}
+    slot_dict = {x: [Implant(slot=x)] for x in range(1, 11)}  # Add in empty modules
     for implant in implants:
-        if implant.slot in slot_dict:
-            slot_dict[implant.slot].append(implant)
-        else:
-            slot_dict.update({implant.slot: [implant]})
-
-    total = 1
-    for key, value in slot_dict.items():
-        total *= len(value)
+        slot_dict[implant.slot].append(implant)
 
     for x in itertools.product(*slot_dict.values()):
         yield ImplantSet(x)
 
 
-async def get_data(type_id):
+async def implant_from_id(session, type_id, set_bonus_id=None, set_malus_id=None, set_multiplier_id=None,
+                          bonus_ids=None, malus_ids=None):
+    name = await get_item_name(type_id, session)
+    price = await get_item_price(type_id, session)
+    attributes = await get_item_attributes(type_id, session)
+    slot = int(attributes.get(331))
+
+    if set_multiplier_id in attributes:  # The implant is part of a set
+        if set_bonus_id:
+            set_bonus = float(attributes.get(set_bonus_id, 0))
+        elif set_malus_id:
+            set_bonus = 1 / (1 + float(attributes.get(set_bonus_id, 0)) * 0.01) - 1  # Convert to Bonus scale
+        else:
+            raise ValueError("Bonus / Malus id for Implant Set not correct!")
+        set_multiplier = float(attributes.get(set_multiplier_id, 0))
+        return Implant(type_id, name, price, slot, set_bonus=set_bonus, set_multiplier=set_multiplier)
+
+    else:  # The Implant is not part of a set
+        if bonus_ids:
+            for bonus_id in bonus_ids:
+                if bonus_id in attributes:
+                    bonus = float(attributes[bonus_id])
+        elif malus_ids:
+            for malus_id in malus_ids:
+                if malus_id in attributes:
+                    bonus = 1 / (1 + float(attributes[malus_id]) * 0.01) - 1  # Convert to Bonus scale
+        else:
+            raise ValueError("Bonus / Malus id for Hardwiring not correct!")
+        return Implant(type_id, name, price, slot, bonus=bonus)
+
+
+async def implants_from_ids(type_ids, set_bonus_id=None, set_malus_id=None, set_multiplier_id=None, bonus_ids=None,
+                            malus_ids=None):
     async with aiohttp.ClientSession() as session:
-        name = await get_item_name(type_id, session)
-        price = await get_item_price(type_id, session)
-        return type_id, name, price
+        tasks = [
+            implant_from_id(session, type_id, set_bonus_id, set_malus_id, set_multiplier_id, bonus_ids, malus_ids)
+            for type_id in type_ids
+        ]
+        implants = await asyncio.gather(*tasks)
+        return implants
 
 
 async def send_best(arguments, message, implants, command):
@@ -94,217 +123,93 @@ async def send_best(arguments, message, implants, command):
 
 @alru_cache(ttl=1800)
 async def amulets():
-    return [
-        # LG Amulet
-        Implant(*(await get_data(33953)), 1, set_bonus=1, set_multiplier=1.02),
-        Implant(*(await get_data(33954)), 2, set_bonus=2, set_multiplier=1.02),
-        Implant(*(await get_data(33957)), 3, set_bonus=3, set_multiplier=1.02),
-        Implant(*(await get_data(33955)), 4, set_bonus=4, set_multiplier=1.02),
-        Implant(*(await get_data(33956)), 5, set_bonus=5, set_multiplier=1.02),
-        Implant(*(await get_data(33958)), 6, set_bonus=0, set_multiplier=1.1),
-
-        # MG Amulet
-        Implant(*(await get_data(22119)), 1, set_bonus=1, set_multiplier=1.1),
-        Implant(*(await get_data(22120)), 2, set_bonus=2, set_multiplier=1.1),
-        Implant(*(await get_data(22123)), 3, set_bonus=3, set_multiplier=1.1),
-        Implant(*(await get_data(22121)), 4, set_bonus=4, set_multiplier=1.1),
-        Implant(*(await get_data(22122)), 5, set_bonus=5, set_multiplier=1.1),
-        Implant(*(await get_data(22124)), 6, set_bonus=0, set_multiplier=1.25),
-
-        # HG Amulet
-        Implant(*(await get_data(20499)), 1, set_bonus=1, set_multiplier=1.15),
-        Implant(*(await get_data(20501)), 2, set_bonus=2, set_multiplier=1.15),
-        Implant(*(await get_data(20507)), 3, set_bonus=3, set_multiplier=1.15),
-        Implant(*(await get_data(20503)), 4, set_bonus=4, set_multiplier=1.15),
-        Implant(*(await get_data(20505)), 5, set_bonus=5, set_multiplier=1.15),
-        Implant(*(await get_data(20509)), 6, set_bonus=0, set_multiplier=1.5),
-
-        # Noble Hull Upgrades
-        Implant(*(await get_data(27074)), 10, bonus=1),
-        Implant(*(await get_data(3479)), 10, bonus=2),
-        Implant(*(await get_data(13256)), 10, bonus=3),
-        Implant(*(await get_data(3481)), 10, bonus=4),
-        Implant(*(await get_data(19550)), 10, bonus=5),
-        Implant(*(await get_data(3482)), 10, bonus=6),
-        Implant(*(await get_data(21606)), 10, bonus=8),
-
-        # Imp Navy Noble
-        Implant(*(await get_data(32254)), 10, bonus=3),
-    ]
+    return await implants_from_ids(
+        [
+            33953, 33954, 33957, 33955, 33956, 33958,  # LG Amulet
+            22119, 22120, 22123, 22121, 22122, 22124,  # MG Amulet
+            20499, 20501, 20507, 20503, 20505, 20509,  # HG Amulet
+            27074, 3479, 13256, 3481, 19550, 3482, 21606,  # HG-100x
+            32254,  # Imperial Navy Modified 'Noble' Implant
+        ],
+        set_bonus_id=335,
+        set_multiplier_id=864,
+        bonus_ids=[1083],
+    )
 
 
 @alru_cache(ttl=1800)
 async def ascendancies():
-    return [
-        # MG Ascendancy
-        Implant(*(await get_data(33555)), 1, set_bonus=1, set_multiplier=1.1),
-        Implant(*(await get_data(33557)), 2, set_bonus=2, set_multiplier=1.1),
-        Implant(*(await get_data(33563)), 3, set_bonus=3, set_multiplier=1.1),
-        Implant(*(await get_data(33559)), 4, set_bonus=4, set_multiplier=1.1),
-        Implant(*(await get_data(33561)), 5, set_bonus=5, set_multiplier=1.1),
-        Implant(*(await get_data(33565)), 6, set_bonus=0, set_multiplier=1.35),
-
-        # HG Ascendancy
-        Implant(*(await get_data(33516)), 1, set_bonus=1, set_multiplier=1.15),
-        Implant(*(await get_data(33525)), 2, set_bonus=2, set_multiplier=1.15),
-        Implant(*(await get_data(33528)), 3, set_bonus=3, set_multiplier=1.15),
-        Implant(*(await get_data(33526)), 4, set_bonus=4, set_multiplier=1.15),
-        Implant(*(await get_data(33527)), 5, set_bonus=5, set_multiplier=1.15),
-        Implant(*(await get_data(33529)), 6, set_bonus=0, set_multiplier=1.7),
-
-        # Warpspeed Hardwirings
-        Implant(*(await get_data(27115)), 6, bonus=5),
-        Implant(*(await get_data(3117)), 6, bonus=8),
-        Implant(*(await get_data(13242)), 6, bonus=10),
-        Implant(*(await get_data(3118)), 6, bonus=13),
-        Implant(*(await get_data(27114)), 6, bonus=15),
-        Implant(*(await get_data(3119)), 6, bonus=18),
-    ]
+    return await implants_from_ids(
+        [
+            33555, 33557, 33563, 33559, 33561, 33565,  # MG Ascendancy
+            33516, 33525, 33528, 33526, 33527, 33529,  # HG Ascendancy
+            27115, 3117, 13242, 3118, 27114, 3119,  # WS-6xx
+        ],
+        set_bonus_id=624,
+        set_multiplier_id=1932,
+        bonus_ids=[624],
+    )
 
 
 @alru_cache(ttl=1800)
 async def asklepians():
-    return [
-        # LG Asklepian
-        Implant(*(await get_data(42145)), 1, set_bonus=1, set_multiplier=1.02),
-        Implant(*(await get_data(42146)), 2, set_bonus=2, set_multiplier=1.02),
-        Implant(*(await get_data(42202)), 3, set_bonus=3, set_multiplier=1.02),
-        Implant(*(await get_data(42200)), 4, set_bonus=4, set_multiplier=1.02),
-        Implant(*(await get_data(42201)), 5, set_bonus=5, set_multiplier=1.02),
-        Implant(*(await get_data(42203)), 6, set_bonus=0, set_multiplier=1.1),
-
-        # MG Asklepian
-        Implant(*(await get_data(42204)), 1, set_bonus=1, set_multiplier=1.1),
-        Implant(*(await get_data(42205)), 2, set_bonus=2, set_multiplier=1.1),
-        Implant(*(await get_data(42206)), 3, set_bonus=3, set_multiplier=1.1),
-        Implant(*(await get_data(42207)), 4, set_bonus=4, set_multiplier=1.1),
-        Implant(*(await get_data(42208)), 5, set_bonus=5, set_multiplier=1.1),
-        Implant(*(await get_data(42209)), 6, set_bonus=0, set_multiplier=1.25),
-
-        # HG Asklepian
-        Implant(*(await get_data(42210)), 1, set_bonus=1, set_multiplier=1.15),
-        Implant(*(await get_data(42211)), 2, set_bonus=2, set_multiplier=1.15),
-        Implant(*(await get_data(42212)), 3, set_bonus=3, set_multiplier=1.15),
-        Implant(*(await get_data(42213)), 4, set_bonus=4, set_multiplier=1.15),
-        Implant(*(await get_data(42214)), 5, set_bonus=5, set_multiplier=1.15),
-        Implant(*(await get_data(42215)), 6, set_bonus=0, set_multiplier=1.5),
-
-        # Noble Repair Systems
-        Implant(*(await get_data(27070)), 6, bonus=1.0101),
-        Implant(*(await get_data(3291)), 6, bonus=2.0202),
-        Implant(*(await get_data(13258)), 6, bonus=3.0303),
-        Implant(*(await get_data(3292)), 6, bonus=4.0404),
-        Implant(*(await get_data(19547)), 6, bonus=5.0505),
-        Implant(*(await get_data(3299)), 6, bonus=6.0606),
-        Implant(*(await get_data(20358)), 6, bonus=7.0707),
-
-        # Noble Repair Systems
-        Implant(*(await get_data(27073)), 9, bonus=1),
-        Implant(*(await get_data(3476)), 9, bonus=2),
-        Implant(*(await get_data(19684)), 9, bonus=3),
-        Implant(*(await get_data(3477)), 9, bonus=4),
-        Implant(*(await get_data(19685)), 9, bonus=5),
-        Implant(*(await get_data(3478)), 9, bonus=6),
-
-        Implant(*(await get_data(32254)), 10, bonus=3)
-    ]
+    return await implants_from_ids(
+        [
+            42145, 42146, 42202, 42200, 42201, 42203,  # LG Asklepian
+            42204, 42205, 42206, 42207, 42208, 42209,  # MG Asklepian
+            42210, 42211, 42212, 42213, 42214, 42215,  # HG Asklepian
+            27070, 3291, 13258, 3292, 19547, 3299,  # RS-60x
+            20358,  # Numon Family Heirloom
+            27073, 3476, 19684, 3477, 19685, 3478,  # RP-90x
+            32254,  # Imperial Navy Modified 'Noble' Implant
+        ],
+        set_bonus_id=2457,
+        set_multiplier_id=803,
+        bonus_ids=[806],
+        malus_ids=[312],
+    )
 
 
 @alru_cache(ttl=1800)
 async def crystals():
-    return [
-        # LG Crystal
-        Implant(*(await get_data(33923)), 1, set_bonus=1, set_multiplier=1.02),
-        Implant(*(await get_data(33924)), 2, set_bonus=2, set_multiplier=1.02),
-        Implant(*(await get_data(33927)), 3, set_bonus=3, set_multiplier=1.02),
-        Implant(*(await get_data(33925)), 4, set_bonus=4, set_multiplier=1.02),
-        Implant(*(await get_data(33926)), 5, set_bonus=5, set_multiplier=1.02),
-        Implant(*(await get_data(33928)), 6, set_bonus=0, set_multiplier=1.1),
-
-        # MG Crystal
-        Implant(*(await get_data(22107)), 1, set_bonus=1, set_multiplier=1.1),
-        Implant(*(await get_data(22108)), 2, set_bonus=2, set_multiplier=1.1),
-        Implant(*(await get_data(22111)), 3, set_bonus=3, set_multiplier=1.1),
-        Implant(*(await get_data(22109)), 4, set_bonus=4, set_multiplier=1.1),
-        Implant(*(await get_data(22110)), 5, set_bonus=5, set_multiplier=1.1),
-        Implant(*(await get_data(22112)), 6, set_bonus=0, set_multiplier=1.25),
-
-        # HG Crystal
-        Implant(*(await get_data(20121)), 1, set_bonus=1, set_multiplier=1.15),
-        Implant(*(await get_data(20157)), 2, set_bonus=2, set_multiplier=1.15),
-        Implant(*(await get_data(20158)), 3, set_bonus=3, set_multiplier=1.15),
-        Implant(*(await get_data(20159)), 4, set_bonus=4, set_multiplier=1.15),
-        Implant(*(await get_data(20160)), 5, set_bonus=5, set_multiplier=1.15),
-        Implant(*(await get_data(20161)), 6, set_bonus=0, set_multiplier=1.5)
-    ]
+    return await implants_from_ids(
+        [
+            33923, 33924, 33927, 33925, 33926, 33928,  # LG Crystal
+            22107, 22108, 22111, 22109, 22110, 22112,  # MG Crystal
+            20121, 20157, 20158, 20159, 20160, 20161,  # HG Crystal
+        ],
+        set_bonus_id=548,
+        set_multiplier_id=838,
+    )
 
 
 @alru_cache(ttl=1800)
 async def snakes():
-    return [
-        # LG Snake
-        Implant(*(await get_data(33959)), 1, set_bonus=0.5, set_multiplier=1.05),
-        Implant(*(await get_data(33960)), 2, set_bonus=0.62, set_multiplier=1.05),
-        Implant(*(await get_data(33963)), 3, set_bonus=0.75, set_multiplier=1.05),
-        Implant(*(await get_data(33961)), 4, set_bonus=0.88, set_multiplier=1.05),
-        Implant(*(await get_data(33962)), 5, set_bonus=1, set_multiplier=1.05),
-        Implant(*(await get_data(33964)), 6, set_bonus=0, set_multiplier=2.1),
-
-        # MG Snake
-        Implant(*(await get_data(22125)), 1, set_bonus=0.5, set_multiplier=1.1),
-        Implant(*(await get_data(22126)), 2, set_bonus=0.62, set_multiplier=1.1),
-        Implant(*(await get_data(22129)), 3, set_bonus=0.75, set_multiplier=1.1),
-        Implant(*(await get_data(22127)), 4, set_bonus=0.88, set_multiplier=1.1),
-        Implant(*(await get_data(22128)), 5, set_bonus=1, set_multiplier=1.1),
-        Implant(*(await get_data(22130)), 6, set_bonus=0, set_multiplier=2.5),
-
-        # HG Snake
-        Implant(*(await get_data(19540)), 1, set_bonus=0.5, set_multiplier=1.15),
-        Implant(*(await get_data(19551)), 2, set_bonus=0.62, set_multiplier=1.15),
-        Implant(*(await get_data(19553)), 3, set_bonus=0.75, set_multiplier=1.15),
-        Implant(*(await get_data(19554)), 4, set_bonus=0.88, set_multiplier=1.15),
-        Implant(*(await get_data(19555)), 5, set_bonus=1, set_multiplier=1.15),
-        Implant(*(await get_data(19556)), 6, set_bonus=0, set_multiplier=3),
-
-        # Navigation Implants
-        Implant(*(await get_data(27097)), 6, bonus=1),
-        Implant(*(await get_data(3096)), 6, bonus=2),
-        Implant(*(await get_data(13237)), 6, bonus=3),
-        Implant(*(await get_data(3097)), 6, bonus=4),
-        Implant(*(await get_data(16003)), 6, bonus=5),
-        Implant(*(await get_data(3100)), 6, bonus=6),
-        Implant(*(await get_data(24669)), 6, bonus=8),
-
-        # Zor's Custom Navigation Hyperlink
-        Implant(*(await get_data(24663)), 8, bonus=5)
-    ]
+    return await implants_from_ids(
+        [
+            33959, 33960, 33963, 33961, 33962, 33964,  # LG Snake
+            22125, 22126, 22129, 22127, 22128, 22130,  # MG Snake
+            19540, 19551, 19553, 19554, 19555, 19556,  # HG Snake
+            27097, 3096, 13237, 3097, 16003, 3100, 24669,  # NN-60x
+            24663,  # Zor's Custom Navigation Hyperlink
+        ],
+        set_bonus_id=315,
+        set_multiplier_id=802,
+        bonus_ids=[1076, 318],
+    )
 
 
 @alru_cache(ttl=1800)
 async def talismans():
-    return [
-        # You declare the implants you want like this
-        Implant(*(await get_data(33965)), 1, set_bonus=1.0101, set_multiplier=1.02),
-        Implant(*(await get_data(33966)), 2, set_bonus=2.0202, set_multiplier=1.02),
-        Implant(*(await get_data(33969)), 3, set_bonus=3.0303, set_multiplier=1.02),
-        Implant(*(await get_data(33967)), 4, set_bonus=4.0404, set_multiplier=1.02),
-        Implant(*(await get_data(33968)), 5, set_bonus=5.0505, set_multiplier=1.02),
-        Implant(*(await get_data(33970)), 6, set_bonus=0, set_multiplier=1.1),
-        # MG
-        Implant(*(await get_data(22131)), 1, set_bonus=1.0101, set_multiplier=1.1, ),
-        Implant(*(await get_data(22133)), 2, set_bonus=2.0202, set_multiplier=1.1, ),
-        Implant(*(await get_data(22136)), 3, set_bonus=3.0303, set_multiplier=1.1, ),
-        Implant(*(await get_data(22134)), 4, set_bonus=4.0404, set_multiplier=1.1, ),
-        Implant(*(await get_data(22135)), 5, set_bonus=5.0505, set_multiplier=1.1, ),
-        Implant(*(await get_data(22137)), 6, set_bonus=0, set_multiplier=1.25, ),
-        # HG
-        Implant(*(await get_data(19534)), 1, set_bonus=1.0101, set_multiplier=1.15, ),
-        Implant(*(await get_data(19535)), 2, set_bonus=2.0202, set_multiplier=1.15, ),
-        Implant(*(await get_data(19536)), 3, set_bonus=3.0303, set_multiplier=1.15, ),
-        Implant(*(await get_data(19537)), 4, set_bonus=4.0404, set_multiplier=1.15, ),
-        Implant(*(await get_data(19538)), 5, set_bonus=5.0505, set_multiplier=1.15, ),
-        Implant(*(await get_data(19539)), 6, set_bonus=0, set_multiplier=1.5, ),
-    ]
+    return await implants_from_ids(
+        [
+            33965, 33966, 33969, 33967, 33968, 33970,  # LG
+            22131, 22133, 22136, 22134, 22135, 22137,  # MG
+            19534, 19535, 19536, 19537, 19538, 19539,  # HG
+        ],
+        set_malus_id=66,
+        set_multiplier_id=799,
+    )
 
 
 async def command_amulets(arguments, message):

@@ -199,6 +199,16 @@ async def get_item_name(type_id, session):
         return f"Type ID: {type_id}"
 
 
+async def get_item_attributes(type_id, session):
+    async with session.get(f"https://esi.evetech.net/latest/universe/types/{type_id}/") as response:
+        if response.status == 200:
+            out = {}
+            for item in (await response.json(content_type=None))["dogma_attributes"]:
+                out[int(item["attribute_id"])] = item["value"]
+    return out
+
+
+
 async def get_item_price(type_id, session):
     async with session.get(f"https://market.fuzzwork.co.uk/aggregates/?region=10000002&types={type_id}") as response:
         return float((await response.json())[str(type_id)]["sell"]["min"])
