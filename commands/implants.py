@@ -66,16 +66,18 @@ async def implant_from_id(session, type_id, set_bonus_id=None, set_malus_id=None
     slot = int(attributes.get(331))
 
     if set_multiplier_id in attributes:  # The implant is part of a set
+        set_bonus = None
         if set_bonus_id:
             set_bonus = float(attributes.get(set_bonus_id, 0))
         if set_malus_id:
             set_bonus = 1 / (1 + float(attributes.get(set_bonus_id, 0)) * 0.01) - 1  # Convert to Bonus scale
-        else:
+        if not set_bonus:
             raise ValueError("Bonus / Malus id for Implant Set not correct!")
         set_multiplier = float(attributes.get(set_multiplier_id, 0))
         return Implant(type_id, name, price, slot, set_bonus=set_bonus, set_multiplier=set_multiplier)
 
     else:  # The Implant is not part of a set
+        bonus = None
         if bonus_ids:
             for bonus_id in bonus_ids:
                 if bonus_id in attributes:
@@ -84,7 +86,7 @@ async def implant_from_id(session, type_id, set_bonus_id=None, set_malus_id=None
             for malus_id in malus_ids:
                 if malus_id in attributes:
                     bonus = 1 / (1 + float(attributes[malus_id]) * 0.01) - 1  # Convert to Bonus scale
-        else:
+        if not bonus:
             raise ValueError("Bonus / Malus id for Hardwiring not correct!")
         return Implant(type_id, name, price, slot, bonus=bonus)
 
