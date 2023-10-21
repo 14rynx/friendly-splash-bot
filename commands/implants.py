@@ -10,6 +10,8 @@ from utils import isk, convert
 
 
 class Implant:
+    """Holds all the numbers for one implant."""
+
     def __init__(self, type_id=0, name="", price=0, slot=1, set_bonus=0.0, set_multiplier=1.0, bonus=0.0):
         self.name = name
         self.slot = slot
@@ -27,6 +29,8 @@ class Implant:
 
 
 class ImplantSet:
+    """Holds all the numbers for a set of implants which affect the same attribute."""
+
     def __init__(self, implants):
         self.implants = implants
         self.relational_efficiency = 0
@@ -54,6 +58,8 @@ class ImplantSet:
 
 
 def combinations(implants):
+    """returns every possible combination of implants while
+    factoring in their slots, as well as the option to not have any implant in a slot"""
     slot_dict = {x: [Implant(slot=x)] for x in range(1, 11)}  # Add in empty modules
     for implant in implants:
         slot_dict[implant.slot].append(implant)
@@ -130,6 +136,10 @@ async def send_best(arguments, message, implants, command):
     await message.channel.send(ret)
 
 
+async def command_amulets(arguments, message):
+    await send_best(arguments, message, await amulets(), "amulets")
+
+
 @alru_cache(ttl=1800)
 async def amulets():
     return await implants_from_ids(
@@ -146,6 +156,10 @@ async def amulets():
     )
 
 
+async def command_ascendancies(arguments, message):
+    await send_best(arguments, message, await ascendancies(), "ascendancies")
+
+
 @alru_cache(ttl=1800)
 async def ascendancies():
     return await implants_from_ids(
@@ -158,6 +172,10 @@ async def ascendancies():
         set_multiplier_id=1932,
         bonus_ids=[624],
     )
+
+
+async def command_asklepians(arguments, message):
+    await send_best(arguments, message, await asklepians(), "asklepians")
 
 
 @alru_cache(ttl=1800)
@@ -179,6 +197,10 @@ async def asklepians():
     )
 
 
+async def command_crystals(arguments, message):
+    await send_best(arguments, message, await crystals(), "crystals")
+
+
 @alru_cache(ttl=1800)
 async def crystals():
     return await implants_from_ids(
@@ -190,6 +212,10 @@ async def crystals():
         set_bonus_id=548,
         set_multiplier_id=838,
     )
+
+
+async def command_snakes(arguments, message):
+    await send_best(arguments, message, await snakes(), "snakes")
 
 
 @alru_cache(ttl=1800)
@@ -208,6 +234,10 @@ async def snakes():
     )
 
 
+async def command_talismans(arguments, message):
+    await send_best(arguments, message, await talismans(), "talismans")
+
+
 @alru_cache(ttl=1800)
 async def talismans():
     return await implants_from_ids(
@@ -221,25 +251,142 @@ async def talismans():
     )
 
 
-async def command_amulets(arguments, message):
-    await send_best(arguments, message, await amulets(), "amulets")
+async def command_halos(arguments, message):
+    await send_best(arguments, message, await halos(), "halos")
 
 
-async def command_ascendancies(arguments, message):
-    await send_best(arguments, message, await ascendancies(), "ascendancies")
+@alru_cache(ttl=1800)
+async def halos():
+    return await implants_from_ids(
+        [
+            33935, 33936, 33939, 33937, 33938, 33940,  # LG
+            22113, 22117, 22136, 22115, 22116, 22118,  # MG
+            20498, 20500, 20506, 20502, 20504, 20508,  # HG
+        ],
+        set_malus_id=554,
+        set_multiplier_id=863,
+    )
 
 
-async def command_asklepians(arguments, message):
-    await send_best(arguments, message, await asklepians(), "asklepians")
+async def command_hydras(arguments, message):
+    await send_best(arguments, message, await halos(), "hydras")
 
 
-async def command_crystals(arguments, message):
-    await send_best(arguments, message, await crystals(), "crystals")
+@alru_cache(ttl=1800)
+async def hydras():
+    return await implants_from_ids(
+        [
+            54409, 54408, 54407, 54406, 54405, 54404,  # LG
+            54403, 54402, 54401, 54400, 54399, 54398,  # MG
+            54397, 54396, 54395, 54394, 54393, 54392,  # HG
+        ],
+        set_bonus_id=3031,  # There are other bonuses 3028 - 3030, but they are all the same
+        set_multiplier_id=3027,
+    )
 
 
-async def command_snakes(arguments, message):
-    await send_best(arguments, message, await snakes(), "snakes")
+async def command_mimesiss(arguments, message):
+    await send_best(arguments, message, await halos(), "mimesiss")
 
 
-async def command_talismans(arguments, message):
-    await send_best(arguments, message, await talismans(), "talismans")
+@alru_cache(ttl=1800)
+async def mimesiss():
+    return await implants_from_ids(
+        [
+            52683, 52682, 52681, 52680, 52679, 52674,  # LG
+            52790, 52789, 52788, 52787, 52786, 52785,  # MG
+            52922, 52921, 52920, 52919, 52918, 52917,  # HG
+        ],
+        set_bonus_id=2023,  # Only look at max damage modifier
+        set_multiplier_id=2825,
+    )
+
+
+async def command_raptures(arguments, message):
+    await send_best(arguments, message, await halos(), "raptures")
+
+
+@alru_cache(ttl=1800)
+async def raptures():
+    return await implants_from_ids(
+        [
+            57116, 57114, 57113, 57112, 57111, 57110,  # LG
+            57122, 57121, 57120, 57119, 57118, 57117,  # MG
+            57128, 57127, 57126, 57125, 57124, 57123,  # HG
+            27119, 3240, 13260, 3241, 27118, 3246,  # EO-60x
+            27117, 3237, 13259, 3238, 27116, 3239,  # EM-80x
+        ],
+        set_malus_id=314,
+        set_multiplier_id=3107,
+        bonus_ids=[1079],
+        malus_ids=[314],
+    )
+
+
+async def command_saviors(arguments, message):
+    await send_best(arguments, message, await halos(), "saviors")
+
+
+@alru_cache(ttl=1800)
+async def saviors():
+    return await implants_from_ids(
+        [
+            53907, 53906, 53905, 53904, 53903, 53902,  # LG
+            53901, 53900, 53899, 53898, 53897, 53896,  # MG
+            53894, 53893, 53892, 53891, 53890, 53895,  # HG
+        ],
+        set_malus_id=3024,
+        set_multiplier_id=3023,
+    )
+
+
+async def command_harvests(arguments, message):
+    await send_best(arguments, message, await halos(), "harvests")
+
+
+@alru_cache(ttl=1800)
+async def harvests():
+    return await implants_from_ids(
+        [
+            33946, 33945, 33944, 33943, 33942, 33941,  # LG
+            28807, 28806, 28805, 28804, 28803, 28802,  # MG
+        ],
+        set_bonus_id=351,
+        set_multiplier_id=1219,
+    )
+
+
+async def command_nomads(arguments, message):
+    await send_best(arguments, message, await halos(), "nomads")
+
+
+@alru_cache(ttl=1800)
+async def nomads():
+    return await implants_from_ids(
+        [
+            33952, 33951, 33950, 33949, 33948, 33947,  # LG
+            28801, 28800, 28799, 28798, 28797, 28796,  # MG
+            27099, 3093, 13240, 3094, 16004, 3095  # EM-70x
+        ],
+        set_malus_id=151,
+        set_multiplier_id=1282,
+        malus_ids=[151]
+    )
+
+
+async def command_virtues(arguments, message):
+    await send_best(arguments, message, await halos(), "command_virtues")
+
+
+@alru_cache(ttl=1800)
+async def command_virtues():
+    return await implants_from_ids(
+        [
+            33976, 33975, 33974, 33973, 33972, 33971,  # LG
+            28813, 28812, 28811, 28810, 28809, 28808,  # MG
+            27195, 27188, 27194,  # AR-8xx
+        ],
+        set_bonus_id=846,
+        set_multiplier_id=1284,
+        bonus_ids=[846]
+    )
