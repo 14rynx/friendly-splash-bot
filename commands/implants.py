@@ -73,7 +73,7 @@ async def implant_from_id(session, type_id, set_bonus_id=None, set_malus_id=None
         if set_bonus_id:
             set_bonus = float(attributes.get(set_bonus_id, 0))
         elif set_malus_id:
-            set_bonus = 1 / (1 + float(attributes.get(set_bonus_id, 0)) * 0.01) - 1  # Convert to Bonus scale
+            set_bonus = 1 / (1 + float(attributes.get(set_malus_id, 0)) * 0.01) - 1  # Convert to Bonus scale
         else:
             raise ValueError("Bonus / Malus id for Implant Set not correct!")
         set_multiplier = float(attributes.get(set_multiplier_id, 0))
@@ -123,6 +123,10 @@ async def send_best(arguments, message, implants, command):
                              convert(arguments[""][0]) <= x.price <= convert(arguments[""][1])]
     ret = "\n".join(
         map(str, sorted(filtered_combinations, key=lambda x: sorter((x.price, x.bonus)), reverse=True)[:count]))
+
+    if ret == "":
+        ret = "No implant sets found for that price range! \n Make sure you give the price in ISK, you can use k / m / b as modifiers for thousands / millions / billions."
+
     await message.channel.send(ret)
 
 
