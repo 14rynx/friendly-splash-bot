@@ -10,7 +10,7 @@ from utils import isk, convert
 
 
 class Implant:
-    def __init__(self, type_id=0, name="empty", price=0, slot=1, set_bonus=0.0, set_multiplier=1.0, bonus=0.0):
+    def __init__(self, type_id=0, name="", price=0, slot=1, set_bonus=0.0, set_multiplier=1.0, bonus=0.0):
         self.name = name
         self.slot = slot
         self.type_id = type_id
@@ -20,7 +20,10 @@ class Implant:
         self.price = price
 
     def __str__(self):
-        return self.name
+        if self.name == "":
+            return ""
+        else:
+            return self.name + "\n"
 
 
 class ImplantSet:
@@ -44,9 +47,8 @@ class ImplantSet:
         return sum(implant.price for implant in self.implants)
 
     def __str__(self):
-        newline = "\n"
-        return f"**{self.bonus:.4} stat increase for {isk(self.price)} ** ({isk(self.price / (self.bonus - 1) / 100)} per %)" \
-               f"{newline}{newline.join(str(i) for i in self.implants)}"
+        return f"**{self.bonus:.4} stat increase for {isk(self.price)} ** ({isk(self.price / (self.bonus - 1) / 100)} per %)\n" \
+               f"{''.join(str(i) for i in self.implants)}"
 
 
 def combinations(implants):
@@ -66,12 +68,11 @@ async def implant_from_id(session, type_id, set_bonus_id=None, set_malus_id=None
     slot = int(attributes.get(331))
 
     if set_multiplier_id in attributes:  # The implant is part of a set
-        set_bonus = None
         if set_bonus_id:
             set_bonus = float(attributes.get(set_bonus_id, 0))
-        if set_malus_id:
+        elif set_malus_id:
             set_bonus = 1 / (1 + float(attributes.get(set_bonus_id, 0)) * 0.01) - 1  # Convert to Bonus scale
-        if not set_bonus:
+        else:
             raise ValueError("Bonus / Malus id for Implant Set not correct!")
         set_multiplier = float(attributes.get(set_multiplier_id, 0))
         return Implant(type_id, name, price, slot, set_bonus=set_bonus, set_multiplier=set_multiplier)
