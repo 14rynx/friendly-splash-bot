@@ -68,7 +68,7 @@ async def implant_from_id(session, type_id, set_bonus_id=None, set_malus_id=None
     if set_multiplier_id in attributes:  # The implant is part of a set
         if set_bonus_id:
             set_bonus = float(attributes.get(set_bonus_id, 0))
-        elif set_malus_id:
+        if set_malus_id:
             set_bonus = 1 / (1 + float(attributes.get(set_bonus_id, 0)) * 0.01) - 1  # Convert to Bonus scale
         else:
             raise ValueError("Bonus / Malus id for Implant Set not correct!")
@@ -80,7 +80,7 @@ async def implant_from_id(session, type_id, set_bonus_id=None, set_malus_id=None
             for bonus_id in bonus_ids:
                 if bonus_id in attributes:
                     bonus = float(attributes[bonus_id])
-        elif malus_ids:
+        if malus_ids:
             for malus_id in malus_ids:
                 if malus_id in attributes:
                     bonus = 1 / (1 + float(attributes[malus_id]) * 0.01) - 1  # Convert to Bonus scale
