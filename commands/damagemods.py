@@ -1,6 +1,7 @@
 import asyncio
 import math
 import ssl
+import sys
 
 import aiohttp
 import certifi
@@ -186,7 +187,7 @@ def xy_points(unique_mods, repeatable_mods, count, max_cpu, **kwargs):
     for combination in mod_combinations(repeatable_mods, unique_mods, count):
         damage_mod_set = DamageModSet(combination)
         if damage_mod_set.cpu < max_cpu:
-            yield damage_mod_set.price, damage_mod_set.get_damage_multiplier(**kwargs)
+            yield float(damage_mod_set.price), float(damage_mod_set.get_damage_multiplier(**kwargs))
 
 
 def restricted_sets(unique_mods, repeatable_mods, count, min_price, max_price, max_cpu):
@@ -198,7 +199,21 @@ def restricted_sets(unique_mods, repeatable_mods, count, min_price, max_price, m
 
 
 def get_best(unique_mods, repeatable_mods, count, min_price, max_price, max_cpu, results=5, **kwargs):
-    sorter = RelationalSorter(xy_points(unique_mods, repeatable_mods, count, max_cpu, **kwargs))
+    print("Raw Repeatable:", len(repeatable_mods), sys.getsizeof(repeatable_mods))
+    print("Raw Unique:", len(unique_mods), sys.getsizeof(unique_mods))
+
+    # Prefilter modules (This theoretically might reduce the accuracy of the grading curve,
+    # but the extra performance is needed)
+
+    unique_mods = [m for m in unique_mods if min_price / (2 * count) < m.price < max_price * 2]
+    repeatable_mods = [m for m in repeatable_mods if min_price / (2 * count) < m.price < max_price * 2]
+
+    print("Repeatable:", len(repeatable_mods), sys.getsizeof(repeatable_mods))
+    print("Unique:", len(unique_mods), sys.getsizeof(unique_mods))
+
+    xyp = list(xy_points(unique_mods, repeatable_mods, count, max_cpu, **kwargs))
+    # print("Points:", len(xyp), sys.getsizeof(xyp))
+    sorter = RelationalSorter(xyp)
     sets_cpu_price_limited = restricted_sets(unique_mods, repeatable_mods, count, min_price, max_price, max_cpu)
     for x in sorted(sets_cpu_price_limited, key=lambda c: sorter((c.price, c.get_damage_multiplier(**kwargs))),
                     reverse=True)[:results]:
