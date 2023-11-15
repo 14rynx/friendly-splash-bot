@@ -199,18 +199,6 @@ def restricted_sets(unique_mods, repeatable_mods, count, min_price, max_price, m
 
 
 def get_best(unique_mods, repeatable_mods, count, min_price, max_price, max_cpu, results=5, **kwargs):
-    print("Raw Repeatable:", len(repeatable_mods), sys.getsizeof(repeatable_mods))
-    print("Raw Unique:", len(unique_mods), sys.getsizeof(unique_mods))
-
-    # Prefilter modules (This theoretically might reduce the accuracy of the grading curve,
-    # but the extra performance is needed)
-
-    unique_mods = [m for m in unique_mods if min_price / (2 * count) < m.price < max_price * 2]
-    repeatable_mods = [m for m in repeatable_mods if min_price / (2 * count) < m.price < max_price * 2]
-
-    print("Repeatable:", len(repeatable_mods), sys.getsizeof(repeatable_mods))
-    print("Unique:", len(unique_mods), sys.getsizeof(unique_mods))
-
     xyp = list(xy_points(unique_mods, repeatable_mods, count, max_cpu, **kwargs))
     # print("Points:", len(xyp), sys.getsizeof(xyp))
     sorter = RelationalSorter(xyp)
@@ -235,7 +223,7 @@ async def send_best(arguments, message, command, unique_getter, repeatable_gette
     try:
         slots = int(arguments[""][0])
         max_cpu = float(arguments[""][1])
-        min_prie = convert(arguments[""][2])
+        min_price = convert(arguments[""][2])
         max_price = convert(arguments[""][3])
     except (KeyError, IndexError, ValueError):
         await send_help_message(message, command)
@@ -274,9 +262,25 @@ async def send_best(arguments, message, command, unique_getter, repeatable_gette
         await message.channel.send("Fetching contract modules...")
         unique_mods = await unique_getter()
 
+        print("Raw Repeatable:", len(repeatable_mods), sys.getsizeof(repeatable_mods))
+        print("Raw Unique:", len(unique_mods), sys.getsizeof(unique_mods))
+
+        # Prefilter modules (This theoretically might reduce the accuracy of the grading curve,
+        # but the extra performance is needed)
+        unique_mods = [m for m in unique_mods if min_price / (2 * count) < m.price < max_price * 2]
+        repeatable_mods = [m for m in repeatable_mods if min_price / (2 * count) < m.price < max_price * 2]
+
+        print("Repeatable:", len(repeatable_mods), sys.getsizeof(repeatable_mods))
+        print("Unique:", len(unique_mods), sys.getsizeof(unique_mods))
+
+        if (len(unique_mods) + len(repeatable_mods)) ** slots > 80e9:
+            await message.channel.send("There are to many combinations your requirements!\n "
+                                       "Consider reducing the price range or amount of slots.")
+            return
+
         ret = ""
         for itemset, effectiveness in get_best(
-                unique_mods, repeatable_mods, slots, min_prie, max_price, max_cpu,
+                unique_mods, repeatable_mods, slots, min_price, max_price, max_cpu,
                 results=count, uptime=uptime, rof_rig=rof_rig, damage_rig=damage_rig
         ):
             ret += await itemset.async_str(effectiveness)
