@@ -1,22 +1,19 @@
 from datetime import datetime, timedelta
-from utils import lookup, gather_kills
+
+from discord.ext import commands
+
+from utils import lookup, gather_kills, unix_style_arg_parser
 
 
-help_message = "\n".join([
-    "Usage:",
-    "!blobfactor",
-    "<character_name>|<character_id> |",
-    "-c|--corporation <corporation_name>|<corporation_id>",
-    "-a|--alliance <alliance_name>|<alliance_id>",
-    "[-d|--days <days_to_querry> | --alltime]"
-])
-
-
-async def command_blobfactor(arguments, message):
-
-    if "help" in arguments:
-        await message.channel.send(help_message)
-        return
+@commands.command()
+async def blobfactor(ctx, *args):
+    """
+    !blobfactor <character_name> | <character_id> |
+            -c|--corporation <corporation_name>|<corporation_id>
+            -a|--alliance <alliance_name>|<alliance_id>
+        [-d|--days <days_to_querry> | --alltime]
+    """
+    arguments = unix_style_arg_parser(args)
 
     try:
         # Config
@@ -52,7 +49,7 @@ async def command_blobfactor(arguments, message):
             days = (datetime.utcnow() - until).days
 
         friendlies = []
-        kills = await gather_kills(f"https://zkillboard.com/api/kills/{querry}/{id}/kills/",  until)
+        kills = await gather_kills(f"https://zkillboard.com/api/kills/{querry}/{id}/kills/", until)
         for kill in kills:
             friendlies.extend(kill['attackers'])
 
@@ -61,15 +58,19 @@ async def command_blobfactor(arguments, message):
         for loss in losses:
             enemies.extend(loss['attackers'])
 
-        if "thirdparty" in arguments and arguments["thirdparty"] == ["no"]:
+        if "thirdparty" in arguments and arguments["thirdparty"] == ["no"]:  # WTF is this!?
             friendlies = [f for f in friendlies if "corporation_id" in f and f["corporation_id"] == 98633005]
             enemies = [e for e in enemies if "corporation_id" in e and e["corporation_id"] != 98633005]
 
-        await message.channel.send(
+        await ctx.send(
             f"**{name}'s last {days} days ** (analyzed {len(kills)} kills and {len(losses)} losses) \n"
             f"Average Pilots on kill: {len(friendlies) / len(kills) :.2f}\n"
             f"Average Enemies on loss: {len(enemies) / len(losses) :.2f}\n"
             f"Blob Factor: {len(friendlies) / len(kills) * len(losses) / len(enemies) :.2f}"
         )
     except Exception as e:
-        await message.channel.send("Could not find data for that. " + help_message)
+        await ctx.send("Could not find data for that.")
+
+
+async def setup(bot):
+    bot.add_command(blobfactor)

@@ -3,19 +3,18 @@ import random
 
 def help_text(character_days, corporation_days, alliance_days):
     return '**calculates buckets based on recent amount of Pilots involved in Killmails: **\n' \
-            f' - For Characters         {character_days} Days \n' \
-            f' - For Corporations       {corporation_days} Days \n' \
-            f' - For Alliances               {alliance_days} Days \n\n' \
-            '**And then assigns them into groups:**\n' \
-            ' - For Small Gang     1 -   9 pilots\n' \
-            ' - For Mid Gang     10 - 29 pilots\n' \
-            ' - For Blob              30 +      pilots\n\n' \
-            '**Usage:**\n' \
-            '!killbucket name/characterID\n\n' \
-            ' -h, --help                shows this message\n' \
-            ' -a, --alliance          searches for an alliance\n' \
-            ' -c, --corporation   searches for a corporation\n\n' \
-            '*Other Functions: \n!stonks, !teams, !linkkb, !bucketboard*'
+           f' - For Characters         {character_days} Days \n' \
+           f' - For Corporations       {corporation_days} Days \n' \
+           f' - For Alliances               {alliance_days} Days \n\n' \
+           '**And then assigns them into groups:**\n' \
+           ' - For Small Gang     1 -   9 pilots\n' \
+           ' - For Mid Gang     10 - 29 pilots\n' \
+           ' - For Blob              30 +      pilots\n\n' \
+           '**Usage:**\n' \
+           '!killbucket name/characterID\n\n' \
+           ' -h, --help                shows this message\n' \
+           ' -a, --alliance          searches for an alliance\n' \
+           ' -c, --corporation   searches for a corporation\n\n'
 
 
 def judgment_phrase_generator(name, id, kills, days, group):
@@ -31,13 +30,17 @@ def judgment_phrase_generator(name, id, kills, days, group):
             return "<@242164531151765505> someone is looking for you"
 
         if max(kills, key=lambda key: kills[key]) == 'solo':
-            return character_solo_generator(name) + character_activity_generator(name, kills, days / 2)  # One Kill every other day
+            return character_solo_generator(name) + character_activity_generator(name, kills,
+                                                                                 days / 2)  # One Kill every other day
         elif small_gang < blob_gang and mid_gang < blob_gang:
-            return character_blobber_generator(name) + character_activity_generator(name, kills, 2 * days)  # Two Kills a day
+            return character_blobber_generator(name) + character_activity_generator(name, kills,
+                                                                                    2 * days)  # Two Kills a day
         elif mid_gang > small_gang:
-            return character_midgang_generator(name) + character_activity_generator(name, kills, 2 * days)  # Two Kills a day
+            return character_midgang_generator(name) + character_activity_generator(name, kills,
+                                                                                    2 * days)  # Two Kills a day
         else:
-            return character_smallgang_generator(name) + character_activity_generator(name, kills, days)  # One Kill a day
+            return character_smallgang_generator(name) + character_activity_generator(name, kills,
+                                                                                      days)  # One Kill a day
     else:
         if sum(kills.values()) < days / 2:
             return f"{name} - you guys are true discord warriors!"
@@ -55,15 +58,16 @@ def judgment_phrase_generator(name, id, kills, days, group):
         else:
             return group_smallgang_generator(name)
 
+
 def start_phrase_generator(group):
     if not group:
         return random.choice([
-           'You are probably a filthy blobber, we\'ll see.',
-           'Small gang best gang.', 'Backpacks dont\'t count.',
-           'Strix Ryden #2!',
-           'I miss offgrid links.',
-           'You and 4 alts is BARELY solo.',
-           'Damn Pyfa warriors'
+            'You are probably a filthy blobber, we\'ll see.',
+            'Small gang best gang.', 'Backpacks dont\'t count.',
+            'Strix Ryden #2!',
+            'I miss offgrid links.',
+            'You and 4 alts is BARELY solo.',
+            'Damn Pyfa warriors'
         ])
     else:
         return random.choice([

@@ -208,7 +208,38 @@ async def get_item_attributes(type_id, session):
     return out
 
 
-
 async def get_item_price(type_id, session):
     async with session.get(f"https://market.fuzzwork.co.uk/aggregates/?region=10000002&types={type_id}") as response:
         return float((await response.json())[str(type_id)]["sell"]["min"])
+
+
+def unix_style_arg_parser(args, separator=" ", letter_argument="-", word_argument="--"):
+    message = " ".join(args)
+    elements = message.split(separator)
+    arguments = {}
+    key = ""
+    values = []
+
+    for element in elements:
+        element.strip()
+
+        if element[0:2] == word_argument:
+            if values:
+                arguments.update({key: values})
+            key = element.strip(word_argument)
+            values = []
+
+        elif element[0] == letter_argument:
+            if values:
+                arguments.update({key: values})
+            for x in element.strip(letter_argument)[:-1]:
+                arguments.update({x: []})
+            key = element.strip(letter_argument)[-1]
+            values = []
+
+        else:
+            values.append(element)
+
+    arguments.update({key: values})
+
+    return arguments
