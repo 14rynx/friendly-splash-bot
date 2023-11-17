@@ -4,6 +4,7 @@ import aiohttp
 import ssl
 import certifi
 from utils import lookup, gather_kills
+from discord.ext import commands
 
 
 async def get_corp_name(corporation_id, session):
@@ -129,19 +130,20 @@ async def get_corp_statistics(corporation_id):
     return f"**{name}'s last {days} Days** \n Timezone: {timezone_string} \n Active Characters: {active_characters}/{total_characters} \n Average Nanos on Ships: {avg_nanos:.2f}\n Average Fleet Size on Killmail: {avg_friendlies:.2f} \n Average Enemy Fleet Size on Killmail: {avg_enemies:.2f} \n Blob Factor: {avg_friendlies / avg_enemies:.2f}"
 
 
-help_message = "Usage:\n !corp <corporation_name>|<corporation_id>"
-
-
-async def command_corp(arguments, message):
-    if "help" in arguments:
-        await message.channel.send(help_message)
-        return
-
+@commands.command()
+async def corp(ctx, *args):
+    """
+    !corp <corporation_name> | <corporation_id>
+    """
     try:
-        name = " ".join(arguments[""])
+        name = " ".join(args)
         id = lookup(name, 'corporations')
 
         response = await get_corp_statistics(id)
-        await message.channel.send(response)
+        await ctx.send(response)
     except Exception as e:
-        await message.channel.send("Could not use arguments. " + help_message)
+        await ctx.send("Could not use arguments.")
+
+
+async def setup(bot):
+    bot.add_command(corp)

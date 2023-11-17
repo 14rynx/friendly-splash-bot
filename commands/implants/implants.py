@@ -1,60 +1,12 @@
-import asyncio
 import itertools
 
-import aiohttp
 from async_lru import alru_cache
+from discord.ext import commands
 
-from utils import RelationalSorter, get_item_attributes
-from utils import get_item_name, get_item_price
-from utils import isk, convert
-
-
-class Implant:
-    """Holds all the numbers for one implant."""
-
-    def __init__(self, type_id=0, name="", price=0, slot=1, set_bonus=0.0, set_multiplier=1.0, bonus=0.0):
-        self.name = name
-        self.slot = slot
-        self.type_id = type_id
-        self.set_bonus = set_bonus
-        self.set_multiplier = set_multiplier
-        self.bonus = bonus
-        self.price = price
-
-    def __str__(self):
-        if self.name == "":
-            return ""
-        else:
-            return self.name + "\n"
-
-
-class ImplantSet:
-    """Holds all the numbers for a set of implants which affect the same attribute."""
-
-    def __init__(self, implants):
-        self.implants = implants
-        self.relational_efficiency = 0
-
-    @property
-    def bonus(self):
-        multiplier = 1
-        for implant in self.implants:
-            multiplier *= implant.set_multiplier
-
-        bonus = 1
-        for implant in self.implants:
-            bonus *= (1 + implant.bonus * 0.01) * (1 + implant.set_bonus * 0.01 * multiplier)
-        return bonus
-
-    @property
-    def price(self):
-        return sum(implant.price for implant in self.implants)
-
-    def __str__(self):
-        if self.bonus == 1:
-            return "**No stat increase for 0 isk (*infinite value!*)**\n"
-        return f"**{self.bonus:.4} stat increase for {isk(self.price)} ** ({isk(self.price / (self.bonus - 1) / 100)} per %):\n" \
-               f"{''.join(str(i) for i in self.implants)}"
+from commands.implants.classes import ImplantSet, Implant
+from commands.implants.network import implants_from_ids
+from utils import RelationalSorter, unix_style_arg_parser
+from utils import convert
 
 
 def combinations(implants):
@@ -68,80 +20,27 @@ def combinations(implants):
         yield ImplantSet(x)
 
 
-async def implant_from_id(session, type_id, set_bonus_id=None, set_malus_id=None, set_multiplier_id=None,
-                          bonus_ids=None, malus_ids=None):
-    name = await get_item_name(type_id, session)
-    price = await get_item_price(type_id, session)
-    attributes = await get_item_attributes(type_id, session)
-    slot = int(attributes.get(331))
+async def send_best(ctx, min_price, max_price, implants):
+    arguments = unix_style_arg_parser(min_price, max_price)
 
-    if set_multiplier_id in attributes:  # The implant is part of a set
-        if set_bonus_id:
-            set_bonus = float(attributes.get(set_bonus_id, 0))
-        elif set_malus_id:
-            set_bonus = 100 / (1 + float(attributes.get(set_malus_id, 0)) * 0.01) - 100  # Convert to Bonus scale
-        else:
-            raise ValueError("Bonus / Malus id for Implant Set not correct!")
-        set_multiplier = float(attributes.get(set_multiplier_id, 0))
-        return Implant(type_id, name, price, slot, set_bonus=set_bonus, set_multiplier=set_multiplier)
-
-    else:  # The Implant is not part of a set
-        bonus = None
-        if bonus_ids:
-            for bonus_id in bonus_ids:
-                if bonus_id in attributes:
-                    bonus = float(attributes[bonus_id])
-        if malus_ids:
-            for malus_id in malus_ids:
-                if malus_id in attributes:
-                    bonus = 100 / (1 + float(attributes[malus_id]) * 0.01) - 100  # Convert to Bonus scale
-        if not bonus:
-            raise ValueError("Bonus / Malus id for Hardwiring not correct!")
-        return Implant(type_id, name, price, slot, bonus=bonus)
-
-
-async def implants_from_ids(type_ids, set_bonus_id=None, set_malus_id=None, set_multiplier_id=None, bonus_ids=None,
-                            malus_ids=None):
-    async with aiohttp.ClientSession() as session:
-        tasks = [
-            implant_from_id(session, type_id, set_bonus_id, set_malus_id, set_multiplier_id, bonus_ids, malus_ids)
-            for type_id in type_ids
-        ]
-        implants = await asyncio.gather(*tasks)
-        return implants
-
-
-async def send_best(arguments, message, implants, command):
     if "help" in arguments:
-        await message.channel.send(
-            f"Usage:\n !{command} <min_price> <max_price>")
+        await ctx.send(
+            f"")
         return
 
-    if "count" in arguments:
-        count = int(arguments["count"][0])
-    elif "c" in arguments:
-        count = int(arguments["c"][0])
-    else:
-        count = 3
-
     sorter = RelationalSorter([(c.price, c.bonus) for c in combinations(implants)])
-    filtered_combinations = [x for x in combinations(implants) if
-                             convert(arguments[""][0]) <= x.price <= convert(arguments[""][1])]
+    filtered_combinations = [x for x in combinations(implants) if convert(min_price) <= x.price <= convert(max_price)]
     ret = "\n".join(
-        map(str, sorted(filtered_combinations, key=lambda x: sorter((x.price, x.bonus)), reverse=True)[:count]))
+        map(str, sorted(filtered_combinations, key=lambda x: sorter((x.price, x.bonus)), reverse=True)[:3]))
 
     if ret == "":
         ret = "No implant sets found for that price range! \n Make sure you give the price in ISK, you can use k / m / b as modifiers for thousands / millions / billions."
 
-    await message.channel.send(ret)
-
-
-async def command_amulets(arguments, message):
-    await send_best(arguments, message, await amulets(), "amulets")
+    await ctx.send(ret)
 
 
 @alru_cache(ttl=1800)
-async def amulets():
+async def _amulets():
     return await implants_from_ids(
         [
             33953, 33954, 33957, 33955, 33956, 33958,  # LG Amulet
@@ -156,12 +55,8 @@ async def amulets():
     )
 
 
-async def command_ascendancies(arguments, message):
-    await send_best(arguments, message, await ascendancies(), "ascendancies")
-
-
 @alru_cache(ttl=1800)
-async def ascendancies():
+async def _ascendancies():
     return await implants_from_ids(
         [
             33555, 33557, 33563, 33559, 33561, 33565,  # MG Ascendancy
@@ -174,12 +69,8 @@ async def ascendancies():
     )
 
 
-async def command_asklepians(arguments, message):
-    await send_best(arguments, message, await asklepians(), "asklepians")
-
-
 @alru_cache(ttl=1800)
-async def asklepians():
+async def _asklepians():
     return await implants_from_ids(
         [
             42145, 42146, 42202, 42200, 42201, 42203,  # LG Asklepian
@@ -197,12 +88,8 @@ async def asklepians():
     )
 
 
-async def command_crystals(arguments, message):
-    await send_best(arguments, message, await crystals(), "crystals")
-
-
 @alru_cache(ttl=1800)
-async def crystals():
+async def _crystals():
     return await implants_from_ids(
         [
             33923, 33924, 33927, 33925, 33926, 33928,  # LG Crystal
@@ -214,12 +101,8 @@ async def crystals():
     )
 
 
-async def command_snakes(arguments, message):
-    await send_best(arguments, message, await snakes(), "snakes")
-
-
 @alru_cache(ttl=1800)
-async def snakes():
+async def _snakes():
     return await implants_from_ids(
         [
             33959, 33960, 33963, 33961, 33962, 33964,  # LG Snake
@@ -234,12 +117,8 @@ async def snakes():
     )
 
 
-async def command_talismans(arguments, message):
-    await send_best(arguments, message, await talismans(), "talismans")
-
-
 @alru_cache(ttl=1800)
-async def talismans():
+async def _talismans():
     return await implants_from_ids(
         [
             33965, 33966, 33969, 33967, 33968, 33970,  # LG
@@ -251,12 +130,8 @@ async def talismans():
     )
 
 
-async def command_halos(arguments, message):
-    await send_best(arguments, message, await halos(), "halos")
-
-
 @alru_cache(ttl=1800)
-async def halos():
+async def _halos():
     return await implants_from_ids(
         [
             33935, 33936, 33939, 33937, 33938, 33940,  # LG
@@ -268,12 +143,8 @@ async def halos():
     )
 
 
-async def command_hydras(arguments, message):
-    await send_best(arguments, message, await halos(), "hydras")
-
-
 @alru_cache(ttl=1800)
-async def hydras():
+async def _hydras():
     return await implants_from_ids(
         [
             54409, 54408, 54407, 54406, 54405, 54404,  # LG
@@ -285,12 +156,8 @@ async def hydras():
     )
 
 
-async def command_mimesiss(arguments, message):
-    await send_best(arguments, message, await halos(), "mimesiss")
-
-
 @alru_cache(ttl=1800)
-async def mimesiss():
+async def _mimesiss():
     return await implants_from_ids(
         [
             52683, 52682, 52681, 52680, 52679, 52674,  # LG
@@ -302,12 +169,8 @@ async def mimesiss():
     )
 
 
-async def command_raptures(arguments, message):
-    await send_best(arguments, message, await halos(), "raptures")
-
-
 @alru_cache(ttl=1800)
-async def raptures():
+async def _raptures():
     return await implants_from_ids(
         [
             57116, 57114, 57113, 57112, 57111, 57110,  # LG
@@ -323,12 +186,8 @@ async def raptures():
     )
 
 
-async def command_saviors(arguments, message):
-    await send_best(arguments, message, await halos(), "saviors")
-
-
 @alru_cache(ttl=1800)
-async def saviors():
+async def _saviors():
     return await implants_from_ids(
         [
             53907, 53906, 53905, 53904, 53903, 53902,  # LG
@@ -340,12 +199,8 @@ async def saviors():
     )
 
 
-async def command_harvests(arguments, message):
-    await send_best(arguments, message, await halos(), "harvests")
-
-
 @alru_cache(ttl=1800)
-async def harvests():
+async def _harvests():
     return await implants_from_ids(
         [
             33946, 33945, 33944, 33943, 33942, 33941,  # LG
@@ -356,12 +211,8 @@ async def harvests():
     )
 
 
-async def command_nomads(arguments, message):
-    await send_best(arguments, message, await halos(), "nomads")
-
-
 @alru_cache(ttl=1800)
-async def nomads():
+async def _nomads():
     return await implants_from_ids(
         [
             33952, 33951, 33950, 33949, 33948, 33947,  # LG
@@ -374,12 +225,8 @@ async def nomads():
     )
 
 
-async def command_virtues(arguments, message):
-    await send_best(arguments, message, await halos(), "command_virtues")
-
-
 @alru_cache(ttl=1800)
-async def command_virtues():
+async def _virtues():
     return await implants_from_ids(
         [
             33976, 33975, 33974, 33973, 33972, 33971,  # LG
@@ -390,3 +237,132 @@ async def command_virtues():
         set_multiplier_id=1284,
         bonus_ids=[846]
     )
+
+
+@commands.command()
+async def ascendancies(ctx, min_price, max_price):
+    """
+    !ascendancies <min_price> <max_price>
+    """
+    await send_best(ctx, min_price, max_price, await _ascendancies())
+
+
+@commands.command()
+async def asklepians(ctx, min_price, max_price):
+    """
+    !asklepians <min_price> <max_price>
+    """
+    await send_best(ctx, min_price, max_price, await _asklepians())
+
+
+@commands.command()
+async def amulets(ctx, min_price, max_price):
+    """
+    !amulets <min_price> <max_price>
+    """
+    await send_best(ctx, min_price, max_price, await _amulets())
+
+
+@commands.command()
+async def crystals(ctx, min_price, max_price):
+    """
+    !crystals <min_price> <max_price>
+    """
+    await send_best(ctx, min_price, max_price, await _crystals())
+
+
+@commands.command()
+async def talismans(ctx, min_price, max_price):
+    """
+    !talismans <min_price> <max_price>
+    """
+    await send_best(ctx, min_price, max_price, await _talismans())
+
+
+@commands.command()
+async def snakes(ctx, min_price, max_price):
+    """
+    !snakes <min_price> <max_price>
+    """
+    await send_best(ctx, min_price, max_price, await _snakes())
+
+
+@commands.command()
+async def halos(ctx, min_price, max_price):
+    """
+    !halos <min_price> <max_price>
+    """
+    await send_best(ctx, min_price, max_price, await _halos())
+
+
+@commands.command()
+async def hydras(ctx, min_price, max_price):
+    """
+    !hydras <min_price> <max_price>
+    """
+    await send_best(ctx, min_price, max_price, await _hydras())
+
+
+@commands.command()
+async def mimesiss(ctx, min_price, max_price):
+    """
+    !mimesiss <min_price> <max_price>
+    """
+    await send_best(ctx, min_price, max_price, await _mimesiss())
+
+
+@commands.command()
+async def raptures(ctx, min_price, max_price):
+    """
+    !raptures <min_price> <max_price>
+    """
+    await send_best(ctx, min_price, max_price, await _raptures())
+
+
+@commands.command()
+async def saviors(ctx, min_price, max_price):
+    """
+    !saviors <min_price> <max_price>
+    """
+    await send_best(ctx, min_price, max_price, await _saviors())
+
+
+@commands.command()
+async def harvests(ctx, min_price, max_price):
+    """
+    !harvests <min_price> <max_price>
+    """
+    await send_best(ctx, min_price, max_price, await _harvests())
+
+
+@commands.command()
+async def nomads(ctx, min_price, max_price):
+    """
+    !nomads <min_price> <max_price>
+    """
+    await send_best(ctx, min_price, max_price, await _nomads())
+
+
+@commands.command()
+async def virtues(ctx, min_price, max_price):
+    """
+    !virtues <min_price> <max_price>
+    """
+    await send_best(ctx, min_price, max_price, await _virtues())
+
+
+async def setup(bot):
+    bot.add_command(ascendancies)
+    bot.add_command(asklepians)
+    bot.add_command(amulets)
+    bot.add_command(crystals)
+    bot.add_command(talismans)
+    bot.add_command(snakes)
+    bot.add_command(halos)
+    bot.add_command(hydras)
+    bot.add_command(mimesiss)
+    bot.add_command(raptures)
+    bot.add_command(saviors)
+    bot.add_command(harvests)
+    bot.add_command(nomads)
+    bot.add_command(virtues)

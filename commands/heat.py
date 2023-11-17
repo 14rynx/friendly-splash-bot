@@ -1,3 +1,8 @@
+from discord.ext import commands
+
+from utils import unix_style_arg_parser
+
+
 class MessageFunctor:
     def __init__(self):
         self.last = False
@@ -65,16 +70,20 @@ def calc_heat(guns, factor=None):
 global functor
 functor = MessageFunctor()
 
-help_message = "Usage:\n !heat <total_slots> <guns> |\n --show <slot-string (X for guns)> [--factor <heat_attenuation>] [--all | -a]"
 
+@commands.command()
+async def heat(ctx, *args):
+    """
+    !heat <total_slots> <guns>
+        | --show <slot-string (X for guns)>
+         [--factor <heat_attenuation>]
+         [--all | -a]"
+    """
 
-async def command_heat(arguments, message):
-    if "help" in arguments:
-        await message.channel.send(help_message)
-        return
+    arguments = unix_style_arg_parser(args)
 
     try:
-        if "show" in arguments:
+        if "show" in arguments:  # TODO: Split into own command
             guns = [1 if x in "Xx" else 0 for x in arguments["show"][0]]
 
             factor = 0
@@ -87,7 +96,7 @@ async def command_heat(arguments, message):
 
             answer = functor(guns, factor=factor, stat_all=stat_all)
 
-            await message.channel.send(answer)
+            await ctx.send(answer)
             return
 
         total, guns = arguments[""]
@@ -95,15 +104,21 @@ async def command_heat(arguments, message):
         guns = int(guns)
 
         if guns > total:
-            await message.channel.send("More guns than slots doesn't work")
+            await ctx.send("More guns than slots doesn't work")
             return
 
         empty = int(total - guns)
         if guns == 1:
-            await message.channel.send("x" + "-" * (total - 1))
+            await ctx.send("x" + "-" * (total - 1))
         else:
-            await message.channel.send("x" * (guns // 2) + "-" * (empty // 2) + "x" * (guns % 2) + "-" * (empty - empty // 2) + "x" * (guns // 2))
+            await ctx.send(
+                "x" * (guns // 2) + "-" * (empty // 2) + "x" * (guns % 2) + "-" * (empty - empty // 2) + "x" * (
+                        guns // 2))
 
     except Exception as e:
         print(e)
-        await message.channel.send(f"Could not use Arguments. " + help_message)
+        await ctx.send(f"Could not use Arguments.")
+
+
+async def setup(bot):
+    bot.add_command(heat)

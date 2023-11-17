@@ -1,5 +1,8 @@
-from utils import convert
 import math
+
+from discord.ext import commands
+
+from utils import convert, unix_style_arg_parser
 
 
 class State:
@@ -161,17 +164,15 @@ def metasolver(state):
     return False, []
 
 
-help_message = "\n".join([
-    "Usage:\n!roll <wh_nominal_mass>",
-    "--<Ship_name>|-<ship_letter> <mass1> [<mass2>, ...]",
-    "[--<ship_name_2>| ...]*"
-])
+@commands.command()
+async def roll(ctx, *args):
+    """
+    !roll <wh_nominal_mass>
+        --<Ship_name>|-<ship_letter> <mass1> [<mass2>, ...]
+        [--<ship_name_2>| ...]*
+    """
 
-
-async def command_roll(arguments, message):
-    if "help" in arguments:
-        await message.channel.send(help_message)
-        return
+    arguments = unix_style_arg_parser(args)
 
     try:
         # Todo: Additional Arguments
@@ -183,8 +184,12 @@ async def command_roll(arguments, message):
         works, path = metasolver(wh)
 
         if works:
-            await message.channel.send("**It works, as following**\n" + print_path(path))
+            await ctx.send("**It works, as following**\n" + print_path(path))
         else:
-            await message.channel.send("**Rolling like this is not possible.**")
+            await ctx.send("**Rolling like this is not possible.**")
     except Exception as e:
-        await message.channel.send("Could not use this data to calculate a valid rolling solution. " + help_message)
+        await ctx.send("Could not use this data to calculate a valid rolling solution. " + help_message)
+
+
+async def setup(bot):
+    bot.add_command(roll)

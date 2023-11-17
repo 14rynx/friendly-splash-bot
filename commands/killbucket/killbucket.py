@@ -1,23 +1,22 @@
-from commands.killbucket_text_generator import judgment_phrase_generator, start_phrase_generator, help_text
-from commands.killbucket_statistics import gather_buckets, make_plot
-from utils import lookup
-import discord
 import datetime
 
-help_message = "\n".join([
-    "Usage:",
-    "!killbucket",
-    "<character_name>|<character_id> |",
-    "-c|--corporation <corporation_name>|<corporation_id>",
-    "-a|--alliance <alliance_name>|<alliance_id>",
-    "[-d|--days <days_to_querry> | --alltime]"
-])
+import discord
+from discord.ext import commands
+
+from commands.killbucket.statistics import gather_buckets, make_plot
+from commands.killbucket.text_generator import judgment_phrase_generator, start_phrase_generator, help_text
+from utils import lookup, unix_style_arg_parser
 
 
-async def command_killbucket(arguments, message):
-    if "help" in arguments:
-        await message.channel.send(help_message)
-        return
+@commands.command()
+async def killbucket(ctx, *args):
+    """
+    !killbucket <character_name>|<character_id> |
+        -c|--corporation <corporation_name>|<corporation_id>
+        -a|--alliance <alliance_name>|<alliance_id>
+    [-d|--days <days_to_querry> | --alltime]
+    """
+    arguments = unix_style_arg_parser(args)
 
     try:
         # Config
@@ -26,7 +25,7 @@ async def command_killbucket(arguments, message):
         alliance_days = 14
 
         if "help" in arguments or "h" in arguments:
-            await message.channel.send(help_text(character_days, corporation_days, alliance_days))
+            await ctx.send(help_text(character_days, corporation_days, alliance_days))
 
         if "alliance" in arguments or "a" in arguments:
             name = " ".join(arguments["a"] if "a" in arguments else arguments["alliance"])
@@ -63,7 +62,7 @@ async def command_killbucket(arguments, message):
             until = datetime.datetime(2003, 5, 6, 0, 0)  # Eve release date
             days = (datetime.datetime.utcnow() - until).days
 
-        await message.channel.send(start_phrase_generator(group) + '\n This might take a minute...')
+        await ctx.send(start_phrase_generator(group) + '\n This might take a minute...')
 
         kill_buckets = await gather_buckets(
             f"https://zkillboard.com/api/kills/{querry}/{id}/kills/",
@@ -76,16 +75,25 @@ async def command_killbucket(arguments, message):
             f"Involved Pilots per KM for {name} in the past {days} days{' (per individual pilot)' if group else ''}"
         )
 
-        await message.channel.send(
+        await ctx.send(
             file=discord.File('plot.png'),
             content=judgment_phrase_generator(name, id, kill_buckets, days, group)
         )
     except Exception as e:
-        await message.channel.send("Could not find data for that. " + help_message)
+        await ctx.send("Could not find data for that.")
 
 
-async def command_linkkb(arguments, message):
+@commands.command()
+async def linkkb(ctx, *args):
+    """
+    !linkkb <character_name>|<character_id>
+    """
     try:
-        await message.channel.send(f"https://zkillboard.com/character/{lookup(' '.join(arguments['']), 'characters')}/")
+        await ctx.send(f"https://zkillboard.com/character/{lookup(' '.join(*args), 'characters')}/")
     except ValueError:
-        await message.channel.send('I\'m not sure who that is')
+        await ctx.send('I\'m not sure who that is')
+
+
+async def setup(bot):
+    bot.add_command(killbucket)
+    bot.add_command(linkkb)
