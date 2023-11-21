@@ -29,7 +29,7 @@ async def send_best(ctx, min_price, max_price, implants):
         return
 
     sorter = RelationalSorter([(c.price, c.bonus) for c in combinations(implants)])
-    filtered_combinations = [x for x in combinations(implants) if convert(min_price) <= x.price <= max_price]
+    filtered_combinations = [x for x in combinations(implants) if convert(min_price) <= x.price <= convert(max_price)]
     ret = "\n".join(
         map(str, sorted(filtered_combinations, key=lambda x: sorter((x.price, x.bonus)), reverse=True)[:3]))
 
