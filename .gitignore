@@ -1,5 +1,4 @@
 /venv/
 /plot.png
-/bot.env
-secrets.json
 .idea/
+.env
