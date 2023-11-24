@@ -1,0 +1,8 @@
+version: '3.1'
+services:
+  friendly-splash-bot:
+    build: '.'
+    restart: unless-stopped
+    container_name: friendly-splash-bot
+    env_file:
+      .env

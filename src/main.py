@@ -1,11 +1,8 @@
 import asyncio
-import json
+import os
 
 import discord
 from discord.ext import commands
-
-with open('secrets.json', "r") as f:
-    TOKEN = json.loads(f.read())["TOKEN"]
 
 intent = discord.Intents.default()
 intent.messages = True
@@ -29,4 +26,4 @@ extensions = [
 for extension in extensions:
     asyncio.run(bot.load_extension(extension))
 
-bot.run(TOKEN)
+bot.run(os.environ["DISCORD_TOKEN"])
