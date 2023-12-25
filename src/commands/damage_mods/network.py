@@ -4,7 +4,7 @@ from commands.damage_mods.classes import DamageMod
 from utils import get_urls
 
 
-async def get_abyssals_damage_mods(type_id: int):
+async def get_abyssals_esi(type_id: int):
     async with aiohttp.ClientSession() as session:
         p_urls = [f"https://esi.evetech.net/latest/contracts/public/10000002/?page={page}" for page in range(1, 100)]
         async for page in get_urls(p_urls, session):
@@ -41,6 +41,19 @@ async def get_abyssals_damage_mods(type_id: int):
 
                     yield DamageMod(price=c_price, type_id=i_type_id, module_id=i_item_id, contract_id=c_id,
                                     attributes=item_attributes["dogma_attributes"])
+
+
+async def get_abyssals_mutamarket(type_id: int):
+    async with aiohttp.ClientSession() as session:
+        async with session.get(f"https://mutamarket.com/modules/json/type/{type_id}/") as response:
+            for item in await response.json():
+                yield DamageMod(
+                    price=item.get("contract").get("unified_price"),
+                    type_id=item.get("mutator_type_id"),
+                    module_id=item.get("id"),
+                    contract_id=item.get("contract").get("id"),
+                    attributes=item.get("attributes")
+                )
 
 
 async def get_cheapest(item_ids):
