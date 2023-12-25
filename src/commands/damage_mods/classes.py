@@ -39,15 +39,13 @@ class DamageMod:
     def __str__(self):
         return asyncio.run(self.async_str())
 
-    async def async_str(self):
+    async def async_str(self, number=1):
         ssl_context = ssl.create_default_context(cafile=certifi.where())
         async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context)) as session:
             if self.module_id is None:
                 return await get_item_name(self.type_id, session)
             else:
-                return (f"Abyssal {self.module_id} (D: {self.damage:.2f}, R: {self.rof:.2f}, C: {self.cpu:.2f})\n"
-                        f"      Link: https://mutaplasmid.space/module/{self.module_id}/ \n"
-                        f"      Contract: <url=contract:30000142//{self.contract_id}>Contract {self.contract_id}</url>")
+                return f"[Abyssal Module {number}](https://mutamarket.com/modules/{self.module_id})"
 
 
 class DamageModSet:
@@ -104,7 +102,7 @@ class DamageModSet:
         return asyncio.run(self.async_str())
 
     async def async_str(self, efficiency=None):
-        header = f"**CPU: {self.cpu:.2f} Damage: {self.damage_multiplier:.3f} Price: {isk(self.price)}" + \
-                 ("**" if efficiency is None else f" (Efficiency: {efficiency})**")
-        body = "\n".join([("   " + await x.async_str()) for x in self.damage_mods])
-        return header + "\n" + body + "\n"
+        out = f"**CPU: {self.cpu:.2f} Damage: {self.damage_multiplier:.3f} Price: {isk(self.price)}" + \
+              ("**" if efficiency is None else f" (Efficiency: {efficiency})**\n")
+        out += "\n".join([await x.async_str(i + 1) for i, x in enumerate(self.damage_mods)])
+        return out

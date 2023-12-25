@@ -1,54 +1,79 @@
-import sys
+import logging
 
 from async_lru import alru_cache
-from discord.ext import commands
-
 from commands.damage_mods.classes import DamageMod, DamageModSet
-from commands.damage_mods.network import get_cheapest, get_abyssals_damage_mods
+from commands.damage_mods.network import get_cheapest, get_abyssals_mutamarket
+from discord.ext import commands
 from utils import RelationalSorter, unix_style_arg_parser
 from utils import convert
 
+# Configure the logger
+logger = logging.getLogger('discord.damage_mods')
+logger.setLevel(logging.INFO)
+handler = logging.FileHandler(filename='discord.log', encoding='utf-8', mode='w')
+handler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
+logger.addHandler(handler)
 
-def mod_combinations(repeatable_mods, unique_mods, count):
+
+def module_combinations(repeatable_mods, unique_mods, count) -> list[list[DamageMod]]:
     if count == 1:
         for m in repeatable_mods + unique_mods:
             yield [m]
     else:
         for i, m in enumerate(repeatable_mods):
-            for y in mod_combinations(repeatable_mods[i:], unique_mods, count - 1):
+            for y in module_combinations(repeatable_mods[i:], unique_mods, count - 1):
                 yield [m] + y
 
         for i, m in enumerate(unique_mods):
-            for y in mod_combinations([], unique_mods[i + 1:], count - 1):
+            for y in module_combinations([], unique_mods[i + 1:], count - 1):
                 yield [m] + y
 
 
-def xy_points(unique_mods, repeatable_mods, count, max_cpu, **kwargs):
-    for combination in mod_combinations(repeatable_mods, unique_mods, count):
-        damage_mod_set = DamageModSet(combination)
-        if damage_mod_set.cpu < max_cpu:
-            yield float(damage_mod_set.price), float(damage_mod_set.get_damage_multiplier(**kwargs))
+def filter_modules(modules: list[DamageMod]) -> list[DamageMod]:
+    """filter out any modules that are strictly worse than some other modules"""
+    modules_to_remove = set()
+    logger.info(f"Modules before filtering: {len(modules)}")
+
+    for module in modules:
+        for other_module in modules:
+            if (module.cpu > other_module.cpu and
+                    module.rof < other_module.rof and
+                    module.damage < other_module.damage and
+                    module.price > other_module.price):
+                modules_to_remove.add(module)
+                break
+
+    # Remove modules
+    modules = list(set(modules) - modules_to_remove)
+
+    logger.info(f"Modules after filtering: {len(modules)}")
+    return modules
 
 
-def restricted_sets(unique_mods, repeatable_mods, count, min_price, max_price, max_cpu):
-    for combination in mod_combinations(repeatable_mods, unique_mods, count):
+def best_sets(
+        unique_mods, repeatable_mods,
+        count, min_price, max_price, max_cpu,
+        results=5, **kwargs
+) -> list[tuple[DamageModSet, float]]:
+    """return the best module sets based on all possible module sets, as well as their relative grading"""
+    sorting_points = []
+    usable_sets = []
+    for combination in module_combinations(repeatable_mods, unique_mods, count):
         damage_mod_set = DamageModSet(combination)
         if damage_mod_set.cpu < max_cpu:
+            sorting_points.append((float(damage_mod_set.price), float(damage_mod_set.get_damage_multiplier(**kwargs))))
             if min_price < damage_mod_set.price < max_price:
-                yield damage_mod_set
+                usable_sets.append(damage_mod_set)
 
+    sorter = RelationalSorter(sorting_points)
 
-def get_best(unique_mods, repeatable_mods, count, min_price, max_price, max_cpu, results=5, **kwargs):
-    xyp = list(xy_points(unique_mods, repeatable_mods, count, max_cpu, **kwargs))
-    # print("Points:", len(xyp), sys.getsizeof(xyp))
-    sorter = RelationalSorter(xyp)
-    sets_cpu_price_limited = restricted_sets(unique_mods, repeatable_mods, count, min_price, max_price, max_cpu)
-    for x in sorted(sets_cpu_price_limited, key=lambda c: sorter((c.price, c.get_damage_multiplier(**kwargs))),
-                    reverse=True)[:results]:
+    for x in sorted(usable_sets, key=lambda c: sorter((c.price, c.get_damage_multiplier(**kwargs))), reverse=True)[
+             :results]:
         yield x, sorter((x.price, x.get_damage_multiplier(**kwargs)))
 
 
 async def send_best(ctx, args, unique_getter, repeatable_getter):
+    # Parse arguments
     arguments = unix_style_arg_parser(args)
 
     try:
@@ -57,94 +82,88 @@ async def send_best(ctx, args, unique_getter, repeatable_getter):
         min_price = convert(arguments[""][2])
         max_price = convert(arguments[""][3])
     except (KeyError, IndexError, ValueError):
+        # Return early if the arguments can't be parsed
         await ctx.send("Could not parse your arguments!")
+        return
+
+    if "count" in arguments:
+        count = int(arguments["count"][0])
+    elif "c" in arguments:
+        count = int(arguments["c"][0])
     else:
-        if "count" in arguments:
-            count = int(arguments["count"][0])
-        elif "c" in arguments:
-            count = int(arguments["c"][0])
-        else:
-            count = 3
+        count = 3
 
-        if "uptime" in arguments:
-            uptime = float(arguments["uptime"][0])
-        elif "u" in arguments:
-            uptime = float(arguments["u"][0])
-        else:
-            uptime = 1.0
+    if "uptime" in arguments:
+        uptime = float(arguments["uptime"][0])
+    elif "u" in arguments:
+        uptime = float(arguments["u"][0])
+    else:
+        uptime = 1.0
 
-        if "rof_rig" in arguments:
-            rof_rig = arguments["rof_rig"][0]
-        elif "r" in arguments:
-            rof_rig = arguments["r"][0]
-        else:
-            rof_rig = ""
+    if "rof_rig" in arguments:
+        rof_rig = arguments["rof_rig"][0]
+    elif "r" in arguments:
+        rof_rig = arguments["r"][0]
+    else:
+        rof_rig = ""
 
-        if "damage_rig" in arguments:
-            damage_rig = arguments["damage_rig"][0]
-        elif "d" in arguments:
-            damage_rig = arguments["d"][0]
-        else:
-            damage_rig = ""
+    if "damage_rig" in arguments:
+        damage_rig = arguments["damage_rig"][0]
+    elif "d" in arguments:
+        damage_rig = arguments["d"][0]
+    else:
+        damage_rig = ""
 
-        await ctx.send("Fetching normal modules...")
-        repeatable_mods = await repeatable_getter()
+    # Fetch modules
+    repeatable_mods = await repeatable_getter()
+    unique_mods = await unique_getter()
 
-        await ctx.send("Fetching contract modules...")
-        unique_mods = await unique_getter()
+    # Filter modules
+    unique_mods = filter_modules(unique_mods)
 
-        print("Raw Repeatable:", len(repeatable_mods), sys.getsizeof(repeatable_mods))
-        print("Raw Unique:", len(unique_mods), sys.getsizeof(unique_mods))
+    # Return early if there are to many combinations
+    if (len(unique_mods) + len(repeatable_mods)) ** slots > 80e9:
+        await ctx.send("There are to many combinations your requirements!\n "
+                       "Consider reducing the price range or amount of slots.")
+        return
 
-        # Prefilter modules (This theoretically might reduce the accuracy of the grading curve,
-        # but the extra performance is needed)
-        unique_mods = [m for m in unique_mods if min_price / (2 * count) < m.price < max_price * 2]
-        repeatable_mods = [m for m in repeatable_mods if min_price / (2 * count) < m.price < max_price * 2]
-
-        print("Repeatable:", len(repeatable_mods), sys.getsizeof(repeatable_mods))
-        print("Unique:", len(unique_mods), sys.getsizeof(unique_mods))
-
-        if (len(unique_mods) + len(repeatable_mods)) ** slots > 80e9:
-            await ctx.send("There are to many combinations your requirements!\n "
-                           "Consider reducing the price range or amount of slots.")
-            return
-
-        ret = ""
-        for itemset, effectiveness in get_best(
-                unique_mods, repeatable_mods, slots, min_price, max_price, max_cpu,
-                results=count, uptime=uptime, rof_rig=rof_rig, damage_rig=damage_rig
-        ):
-            ret += await itemset.async_str(effectiveness)
-
-        if ret == "":
-            ret = "No combinations found for these requirements!"
-
+    # Make printout
+    has_set = False
+    for itemset, effectiveness in best_sets(
+            unique_mods, repeatable_mods, slots, min_price, max_price, max_cpu,
+            results=count, uptime=uptime, rof_rig=rof_rig, damage_rig=damage_rig
+    ):
+        has_set = True
+        ret = await itemset.async_str(effectiveness)
         await ctx.send(ret)
+
+    if not has_set:
+        await ctx.send("No combinations found for these requirements!")
 
 
 @alru_cache(ttl=300)
 async def ballistics_unique():
-    return [x async for x in get_abyssals_damage_mods(49738)]
+    return [x async for x in get_abyssals_mutamarket(49738)]
 
 
 @alru_cache(ttl=300)
 async def entropics_unique():
-    return [x async for x in get_abyssals_damage_mods(49734)]
+    return [x async for x in get_abyssals_mutamarket(49734)]
 
 
 @alru_cache(ttl=300)
 async def gyros_unique():
-    return [x async for x in get_abyssals_damage_mods(49730)]
+    return [x async for x in get_abyssals_mutamarket(49730)]
 
 
 @alru_cache(ttl=300)
 async def heatsinks_unique():
-    return [x async for x in get_abyssals_damage_mods(49726)]
+    return [x async for x in get_abyssals_mutamarket(49726)]
 
 
 @alru_cache(ttl=300)
 async def magstabs_unique():
-    return [x async for x in get_abyssals_damage_mods(49722)]
+    return [x async for x in get_abyssals_mutamarket(49722)]
 
 
 @alru_cache(ttl=1800)
