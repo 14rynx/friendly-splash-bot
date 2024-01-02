@@ -21,6 +21,7 @@ extensions = [
     "commands.rolling",
     "commands.stonks",
     "commands.teams",
+    "commands.multi_abyssals.multi"
 ]
 
 for extension in extensions:
