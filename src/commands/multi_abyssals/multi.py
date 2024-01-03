@@ -34,7 +34,7 @@ def combine_stats(combination):
         for aid, stat in module.attributes.items():
             stats[aid] = stats.get(aid, 0) + stat
 
-    return stat
+    return stats
 
 
 def parse_module(module_string):
