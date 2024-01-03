@@ -34,11 +34,11 @@ def combine_stats(combination):
         for aid, stat in module.attributes.items():
             stats[aid] = stats.get(aid, 0) + stat
 
-    return stats
+    return stat
 
 
 def parse_module(module_string):
-    if module_string in module_dictionary:
+    if module_string.lower() in module_dictionary:
         return module_dictionary[module_string.lower()]
     else:
         return int(module_string)
@@ -54,137 +54,139 @@ def parse_stat(stat_string):
 @commands.command()
 async def multi(ctx, *args):
     """"""
-    # Parse arguments
-    arguments = unix_style_arg_parser(args)
+    try:
+        # Parse arguments
+        arguments = unix_style_arg_parser(args)
 
-    logger.info(f"Arguments {arguments}")
+        logger.info(f"Arguments {arguments}")
 
-    # Parse modules to use
-    module_ids = [parse_module(m) for m in arguments[""]]
-    del arguments[""]
+        # Parse modules to use
+        module_ids = [parse_module(m) for m in arguments[""]]
+        del arguments[""]
 
-    # Parse sorting / filtering to use
-    stats_min = {}
-    stats_max = {}
-    sort_by = 0
-    largest_first = False
+        # Parse sorting / filtering to use
+        stats_min = {}
+        stats_max = {}
+        sort_by = 0
+        largest_first = False
 
-    for stat, values in arguments.items():
-        # Parse stat_id
-        stat_id = parse_stat(stat)
-        last = stat_id
+        for stat, values in arguments.items():
+            # Parse stat_id
+            stat_id = parse_stat(stat)
+            last = stat_id
 
-        logger.info(f"Values {values}")
-        state = "keyword"
-        for i, value in enumerate(values):
-            if state == "keyword":
-                keyword = value.lower()
-                if keyword == "max":
-                    state = "value_max"
-                elif keyword == "min":
-                    state = "value_min"
-                elif keyword == "sort":
-                    sort_by = last
-                    state = "sort"
-                elif keyword == "only":
-                    state = "only"
-                continue
+            logger.info(f"Values {values}")
+            state = "keyword"
+            for i, value in enumerate(values):
+                if state == "keyword":
+                    keyword = value.lower()
+                    if keyword == "max":
+                        state = "value_max"
+                    elif keyword == "min":
+                        state = "value_min"
+                    elif keyword == "sort":
+                        sort_by = last
+                        state = "sort"
+                    elif keyword == "only":
+                        state = "only"
+                    continue
 
-            if state == "value_max":
-                if stat_id in stats_max:
-                    stats_max[last].append(convert(value))
-                else:
-                    stats_max[last] = [convert(value)]
-                state = "keyword"
-                continue
+                if state == "value_max":
+                    if stat_id in stats_max:
+                        stats_max[last].append(convert(value))
+                    else:
+                        stats_max[last] = [convert(value)]
+                    state = "keyword"
+                    continue
 
-            elif state == "value_min":
-                if last in stats_min:
-                    stats_min[last].append(convert(value))
-                else:
-                    stats_min[last] = [convert(value)]
-                state = "keyword"
-                continue
+                elif state == "value_min":
+                    if last in stats_min:
+                        stats_min[last].append(convert(value))
+                    else:
+                        stats_min[last] = [convert(value)]
+                    state = "keyword"
+                    continue
 
-            elif state == "sort":
-                largest_first = "desc" in value.lower()
-                state = "keyword"
-                continue
+                elif state == "sort":
+                    largest_first = "desc" in value.lower()
+                    state = "keyword"
+                    continue
 
-            elif state == "only":
-                last = (stat_id, parse_module(value))
-                state = "keyword"
-                continue
+                elif state == "only":
+                    last = (stat_id, parse_module(value))
+                    state = "keyword"
+                    continue
 
-    logger.info(f"Stats\n Min: {stats_min}\n max: {stats_max}\n Sort by {sort_by}")
-    # Fetch modules
-    tasks = [get_abyssals(type_id) for type_id in module_ids]
-    modules = await asyncio.gather(*tasks)
+        logger.info(f"Stats\n Min: {stats_min}\n max: {stats_max}\n Sort by {sort_by}")
+        # Fetch modules
+        tasks = [get_abyssals(type_id) for type_id in module_ids]
+        modules = await asyncio.gather(*tasks)
 
-    usable_combinations = []
-    # Filter combinations by stats
-    for combination in itertools.product(*modules):
+        usable_combinations = []
+        # Filter combinations by stats
+        for combination in itertools.product(*modules):
 
-        usable = True
+            usable = True
 
-        stats = combine_stats(combination)
+            stats = combine_stats(combination)
 
-        # Check if combination satisfies requirements
-        for requirement, values in stats_min.items():
-            for value in values:
-                if type(requirement) is int:
-                    stat_id = requirement
-                    if stat_id in stats:
-                        if stats[stat_id] < value:
-                            usable = False
+            # Check if combination satisfies requirements
+            for requirement, values in stats_min.items():
+                for value in values:
+                    if type(requirement) is int:
+                        stat_id = requirement
+                        if stat_id in stats:
+                            if stats[stat_id] < value:
+                                usable = False
 
-                elif type(requirement) is tuple:
-                    stat_id, module_id = requirement
-                    for module in combination:
-                        if module.type_id == module_id and module.attributes[stat_id] < value:
-                            usable = False
+                    elif type(requirement) is tuple:
+                        stat_id, module_id = requirement
+                        for module in combination:
+                            if module.type_id == module_id and module.attributes[stat_id] < value:
+                                usable = False
 
-        for requirement, values in stats_max.items():
-            for value in values:
-                if type(requirement) is int:
-                    stat_id = requirement
-                    if stat_id in stats:
-                        if stats[stat_id] > value:
-                            usable = False
+            for requirement, values in stats_max.items():
+                for value in values:
+                    if type(requirement) is int:
+                        stat_id = requirement
+                        if stat_id in stats:
+                            if stats[stat_id] > value:
+                                usable = False
 
-                elif type(requirement) is tuple:
-                    stat_id, module_id = requirement
-                    for module in combination:
-                        if module.type_id == module_id and module.attributes[stat_id] > value:
-                            usable = False
+                    elif type(requirement) is tuple:
+                        stat_id, module_id = requirement
+                        for module in combination:
+                            if module.type_id == module_id and module.attributes[stat_id] > value:
+                                usable = False
 
-        if usable:
-            usable_combinations.append(combination)
+            if usable:
+                usable_combinations.append(combination)
 
-    # Sort combinations
-    def sort(combination):
-        if type(sort_by) is int:
-            stat_id = sort_by
-            return combine_stats(combination)[stat_id]
-        elif type(sort_by) is tuple:
-            stat_id, module_id = sort_by
-            for module in combination:
-                if module.type_id == module_id:
-                    return module.attributes[stat_id]
+        # Sort combinations
+        def sort(combination):
+            if type(sort_by) is int:
+                stat_id = sort_by
+                return combine_stats(combination)[stat_id]
+            elif type(sort_by) is tuple:
+                stat_id, module_id = sort_by
+                for module in combination:
+                    if module.type_id == module_id:
+                        return module.attributes[stat_id]
 
-    for combination in sorted(usable_combinations, key=sort, reverse=largest_first)[:2]:
+        for combination in sorted(usable_combinations, key=sort, reverse=largest_first)[:2]:
+            # Make output
+            urls = " ".join([m.url(i) for i, m in enumerate(combination)])
 
-        # Make output
-        urls = " ".join([m.url(i) for i, m in enumerate(combination)])
+            async with aiohttp.ClientSession() as session:
+                async with session.get("https://sde.hoboleaks.space/tq/dogmaattributes.json") as response:
+                    standard_dictionary = await response.json()
 
-        async with aiohttp.ClientSession() as session:
-            async with session.get("https://sde.hoboleaks.space/tq/dogmaattributes.json") as response:
-                standard_dictionary = await response.json()
+            stats = combine_stats(combination)
+            logger.info(f"Sending {[m.type_id for m in combination]}, {stats}")
 
-        stats = combine_stats(combination)
-        logger.info(f"Sending {[m.type_id for m in combination]}, {stats}")
-
-        await ctx.send(f"## Modules\n{urls}\n")
+            await ctx.send(f"## Modules\n{urls}\n")
+    except ValueError:
+        await ctx.send("Could not parse those arguments!")
 
 
 async def setup(bot):
