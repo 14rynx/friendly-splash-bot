@@ -1,8 +1,9 @@
 class Module:
     def __init__(self, json):
         self.type_id = json['type_id']
-        self.id = json["id"]
+        self.item_id = json["id"]
         self.mutator_type_id = json['mutator_type_id']
+        self.source_type_id = json['source_type_id']
         self.contract_id = json['latest_contract_id']
 
         # Make dictionary with attributes
@@ -30,11 +31,11 @@ class Module:
         return attrs
 
     async def fetch(self, session):
-        async with session.get(f"https://esi.evetech.net/latest/universe/types/{self.type_id}/") as response:
+        async with session.get(f"https://esi.evetech.net/latest/universe/types/{self.source_type_id}/") as response:
             data = await response.json()
             for attribute in data.get("dogma_attributes"):
                 if attribute["attribute_id"] not in self.basic_attributes:
                     self.basic_attributes[attribute["attribute_id"]] = float(attribute["value"])
 
     def url(self, number=1):
-        return f"[Abyssal Module {number}](https://mutamarket.com/modules/{self.id})"
+        return f"[Abyssal Module {number}](https://mutamarket.com/modules/{self.item_id})"

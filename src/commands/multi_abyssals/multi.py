@@ -75,7 +75,6 @@ async def multi(ctx, *args):
             stat_id = parse_stat(stat)
             last = stat_id
 
-            logger.info(f"Values {values}")
             state = "keyword"
             for i, value in enumerate(values):
                 if state == "keyword":
@@ -117,14 +116,43 @@ async def multi(ctx, *args):
                     state = "keyword"
                     continue
 
-        logger.info(f"Stats\n Min: {stats_min}\n max: {stats_max}\n Sort by {sort_by}")
+        logger.info(f"Filter\n - Min: {stats_min}\n - Max: {stats_max}\n - Sort by {sort_by}")
         # Fetch modules
         tasks = [get_abyssals(type_id) for type_id in module_ids]
         modules = await asyncio.gather(*tasks)
 
+        logger.info("All Modules:" + " ".join([str(len(m)) for m in modules]))
+
+        # Check if individual modules satisfy requirements
+        usable_modules = []
+        for module_group in modules:
+            group_usable_modules = []
+            for module in module_group:
+                usable = True
+                for requirement, values in stats_min.items():
+                    for value in values:
+                        if type(requirement) is tuple:
+                            stat_id, module_id = requirement
+                            if module.type_id == module_id and module.attributes[stat_id] < value:
+                                usable = False
+
+                for requirement, values in stats_max.items():
+                    for value in values:
+                        if type(requirement) is tuple:
+                            stat_id, module_id = requirement
+                            if module.type_id == module_id and module.attributes[stat_id] > value:
+                                usable = False
+
+                if usable:
+                    group_usable_modules.append(module)
+
+            usable_modules.append(group_usable_modules)
+
+        logger.info("Usable Modules:" + " ".join([str(len(m)) for m in usable_modules]))
+
         usable_combinations = []
         # Filter combinations by stats
-        for combination in itertools.product(*modules):
+        for combination in itertools.product(*usable_modules):
 
             usable = True
 
@@ -139,12 +167,6 @@ async def multi(ctx, *args):
                             if stats[stat_id] < value:
                                 usable = False
 
-                    elif type(requirement) is tuple:
-                        stat_id, module_id = requirement
-                        for module in combination:
-                            if module.type_id == module_id and module.attributes[stat_id] < value:
-                                usable = False
-
             for requirement, values in stats_max.items():
                 for value in values:
                     if type(requirement) is int:
@@ -153,16 +175,12 @@ async def multi(ctx, *args):
                             if stats[stat_id] > value:
                                 usable = False
 
-                    elif type(requirement) is tuple:
-                        stat_id, module_id = requirement
-                        for module in combination:
-                            if module.type_id == module_id and module.attributes[stat_id] > value:
-                                usable = False
-
             if usable:
                 usable_combinations.append(combination)
 
-        # Sort combinations
+        logger.info(f"Usable combinations: {len(usable_combinations)}")
+
+        # Build sorting functions
         def sort(combination):
             if type(sort_by) is int:
                 stat_id = sort_by
@@ -173,18 +191,22 @@ async def multi(ctx, *args):
                     if module.type_id == module_id:
                         return module.attributes[stat_id]
 
+        # Make output
         for combination in sorted(usable_combinations, key=sort, reverse=largest_first)[:2]:
-            # Make output
             urls = " ".join([m.url(i) for i, m in enumerate(combination)])
 
-            async with aiohttp.ClientSession() as session:
+            # Name stats for output (unused)
+            """async with aiohttp.ClientSession() as session:
                 async with session.get("https://sde.hoboleaks.space/tq/dogmaattributes.json") as response:
                     standard_dictionary = await response.json()
 
-            stats = combine_stats(combination)
-            logger.info(f"Sending {[m.type_id for m in combination]}, {stats}")
+            stats = combine_stats(combination)"""
+            logger.info(
+                f"Result Modules {' '.join(['(' + str(m.type_id) + ' ' + str(m.mutator_type_id) + ')' for m in combination])}\n ")
 
             await ctx.send(f"## Modules\n{urls}\n")
+        if len(usable_combinations) == 0:
+            await ctx.send("Could not find any combinations that satisfy those requirements!")
     except ValueError:
         await ctx.send("Could not parse those arguments!")
 
