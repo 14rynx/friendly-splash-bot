@@ -46,7 +46,7 @@ class DamageMod:
                 return await get_item_name(self.type_id, session)
             else:
                 return (f"[Abyssal Module {number}](https://mutamarket.com/modules/{self.module_id}) "
-                        f"Contract: url=contract:30000142//{self.contract_id}>Contract {self.contract_id}</url>")
+                        f"Contract: <url=contract:30000142//{self.contract_id}>Contract {self.contract_id}</url>")
 
 
 class DamageModSet:
