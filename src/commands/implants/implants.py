@@ -1,4 +1,5 @@
 import itertools
+import logging
 
 from async_lru import alru_cache
 from commands.implants.classes import ImplantSet, Implant
