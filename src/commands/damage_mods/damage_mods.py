@@ -10,9 +10,6 @@ from utils import convert
 # Configure the logger
 logger = logging.getLogger('discord.damage_mods')
 logger.setLevel(logging.INFO)
-handler = logging.FileHandler(filename='discord.log', encoding='utf-8', mode='w')
-handler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
-logger.addHandler(handler)
 
 
 def module_combinations(repeatable_mods, unique_mods, count) -> list[list[DamageMod]]:
@@ -32,7 +29,6 @@ def module_combinations(repeatable_mods, unique_mods, count) -> list[list[Damage
 def filter_modules(modules: list[DamageMod]) -> list[DamageMod]:
     """filter out any modules that are strictly worse than some other modules"""
     modules_to_remove = set()
-    logger.info(f"Modules before filtering: {len(modules)}")
 
     for module in modules:
         for other_module in modules:
@@ -46,7 +42,6 @@ def filter_modules(modules: list[DamageMod]) -> list[DamageMod]:
     # Remove modules
     modules = list(set(modules) - modules_to_remove)
 
-    logger.info(f"Modules after filtering: {len(modules)}")
     return modules
 
 
@@ -236,6 +231,7 @@ async def ballistics(ctx, *args):
         [-r | -rof_rig <t1, t2, t1x2>]
         [-d | -damage_rig <t1, t2, t1x2>]
     """
+    logger.info(f"{ctx.author.name} used !ballistics {args}")
     await send_best(ctx, args, ballistics_unique, ballistics_repeatable)
 
 
@@ -248,6 +244,7 @@ async def entropics(ctx, *args):
         [-r | -rof_rig <t1, t2, t1x2>]
         [-d | -damage_rig <t1, t2, t1x2>]
     """
+    logger.info(f"{ctx.author.name} used !entropics {args}")
     await send_best(ctx, args, entropics_unique, entropics_repeatable)
 
 
@@ -260,6 +257,7 @@ async def gyros(ctx, *args):
         [-r | -rof_rig <t1, t2, t1x2>]
         [-d | -damage_rig <t1, t2, t1x2>]
     """
+    logger.info(f"{ctx.author.name} used !gyros {args}")
     await send_best(ctx, args, gyros_unique, gyros_repeatable)
 
 
@@ -272,6 +270,7 @@ async def heatsinks(ctx, *args):
         [-r | -rof_rig <t1, t2, t1x2>]
         [-d | -damage_rig <t1, t2, t1x2>]
     """
+    logger.info(f"{ctx.author.name} used !heatsinks {args}")
     await send_best(ctx, args, heatsinks_unique, heatsinks_repeatable)
 
 
@@ -284,6 +283,7 @@ async def magstabs(ctx, *args):
         [-r | -rof_rig <t1, t2, t1x2>]
         [-d | -damage_rig <t1, t2, t1x2>]
     """
+    logger.info(f"{ctx.author.name} used !magstabs {args}")
     await send_best(ctx, args, magstabs_unique, magstabs_repeatable)
 
 

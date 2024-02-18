@@ -1,6 +1,11 @@
+import logging
 import random
 
 from discord.ext import commands
+
+# Configure the logger
+logger = logging.getLogger('discord.heat')
+logger.setLevel(logging.INFO)
 
 
 @commands.command()
@@ -8,6 +13,7 @@ async def teams(ctx, *pilots):
     """
     !teams <name_1>, [<name_2>,] ...
     """
+    logger.info(f"{ctx.author.name} used !stonks {pilots}")
     try:
         pilots = list(pilots)
         team_size = len(pilots) // 2

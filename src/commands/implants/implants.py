@@ -1,12 +1,15 @@
 import itertools
 
 from async_lru import alru_cache
-from discord.ext import commands
-
 from commands.implants.classes import ImplantSet, Implant
 from commands.implants.network import implants_from_ids
+from discord.ext import commands
 from utils import RelationalSorter, unix_style_arg_parser
 from utils import convert
+
+# Configure the logger
+logger = logging.getLogger('discord.killbucket')
+logger.setLevel(logging.INFO)
 
 
 def combinations(implants):
@@ -244,6 +247,7 @@ async def ascendancies(ctx, min_price, max_price):
     """
     !ascendancies <min_price> <max_price>
     """
+    logger.info(f"{ctx.author.name} used !ascendancies {min_price} {max_price}")
     await send_best(ctx, min_price, max_price, await _ascendancies())
 
 
@@ -252,6 +256,7 @@ async def asklepians(ctx, min_price, max_price):
     """
     !asklepians <min_price> <max_price>
     """
+    logger.info(f"{ctx.author.name} used !asklepians {min_price} {max_price}")
     await send_best(ctx, min_price, max_price, await _asklepians())
 
 
@@ -260,6 +265,7 @@ async def amulets(ctx, min_price, max_price):
     """
     !amulets <min_price> <max_price>
     """
+    logger.info(f"{ctx.author.name} used !amulets {min_price} {max_price}")
     await send_best(ctx, min_price, max_price, await _amulets())
 
 
@@ -268,6 +274,7 @@ async def crystals(ctx, min_price, max_price):
     """
     !crystals <min_price> <max_price>
     """
+    logger.info(f"{ctx.author.name} used !crystals {min_price} {max_price}")
     await send_best(ctx, min_price, max_price, await _crystals())
 
 
@@ -276,6 +283,7 @@ async def talismans(ctx, min_price, max_price):
     """
     !talismans <min_price> <max_price>
     """
+    logger.info(f"{ctx.author.name} used !talismans {min_price} {max_price}")
     await send_best(ctx, min_price, max_price, await _talismans())
 
 
@@ -284,6 +292,7 @@ async def snakes(ctx, min_price, max_price):
     """
     !snakes <min_price> <max_price>
     """
+    logger.info(f"{ctx.author.name} used !snakes {min_price} {max_price}")
     await send_best(ctx, min_price, max_price, await _snakes())
 
 
@@ -292,6 +301,7 @@ async def halos(ctx, min_price, max_price):
     """
     !halos <min_price> <max_price>
     """
+    logger.info(f"{ctx.author.name} used !halos {min_price} {max_price}")
     await send_best(ctx, min_price, max_price, await _halos())
 
 
@@ -300,6 +310,7 @@ async def hydras(ctx, min_price, max_price):
     """
     !hydras <min_price> <max_price>
     """
+    logger.info(f"{ctx.author.name} used !hydras {min_price} {max_price}")
     await send_best(ctx, min_price, max_price, await _hydras())
 
 
@@ -308,6 +319,7 @@ async def mimesiss(ctx, min_price, max_price):
     """
     !mimesiss <min_price> <max_price>
     """
+    logger.info(f"{ctx.author.name} used !mimesiss {min_price} {max_price}")
     await send_best(ctx, min_price, max_price, await _mimesiss())
 
 
@@ -316,6 +328,7 @@ async def raptures(ctx, min_price, max_price):
     """
     !raptures <min_price> <max_price>
     """
+    logger.info(f"{ctx.author.name} used !raptures {min_price} {max_price}")
     await send_best(ctx, min_price, max_price, await _raptures())
 
 
@@ -324,6 +337,7 @@ async def saviors(ctx, min_price, max_price):
     """
     !saviors <min_price> <max_price>
     """
+    logger.info(f"{ctx.author.name} used !saviors {min_price} {max_price}")
     await send_best(ctx, min_price, max_price, await _saviors())
 
 
@@ -332,6 +346,7 @@ async def harvests(ctx, min_price, max_price):
     """
     !harvests <min_price> <max_price>
     """
+    logger.info(f"{ctx.author.name} used !harvests {min_price} {max_price}")
     await send_best(ctx, min_price, max_price, await _harvests())
 
 
@@ -340,6 +355,7 @@ async def nomads(ctx, min_price, max_price):
     """
     !nomads <min_price> <max_price>
     """
+    logger.info(f"{ctx.author.name} used !nomads {min_price} {max_price}")
     await send_best(ctx, min_price, max_price, await _nomads())
 
 
@@ -348,6 +364,7 @@ async def virtues(ctx, min_price, max_price):
     """
     !virtues <min_price> <max_price>
     """
+    logger.info(f"{ctx.author.name} used !virtues {min_price} {max_price}")
     await send_best(ctx, min_price, max_price, await _virtues())
 
 

@@ -1,8 +1,12 @@
+import logging
 from datetime import datetime, timedelta
 
 from discord.ext import commands
-
 from utils import lookup, gather_kills, unix_style_arg_parser
+
+# Configure the logger
+logger = logging.getLogger('discord.blobfactor')
+logger.setLevel(logging.INFO)
 
 
 @commands.command()
@@ -13,6 +17,7 @@ async def blobfactor(ctx, *args):
             -a|--alliance <alliance_name>|<alliance_id>
         [-d|--days <days_to_querry> | --alltime]
     """
+    logger.info(f"{ctx.author.name} used !blobfactor {args}")
     arguments = unix_style_arg_parser(args)
 
     try:
