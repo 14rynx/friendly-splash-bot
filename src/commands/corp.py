@@ -1,10 +1,16 @@
-from datetime import datetime, timedelta
 import asyncio
-import aiohttp
+import logging
 import ssl
+from datetime import datetime, timedelta
+
+import aiohttp
 import certifi
-from utils import lookup, gather_kills
 from discord.ext import commands
+from utils import lookup, gather_kills
+
+# Configure the logger
+logger = logging.getLogger('discord.corp')
+logger.setLevel(logging.INFO)
 
 
 async def get_corp_name(corporation_id, session):
@@ -135,6 +141,7 @@ async def corp(ctx, *args):
     """
     !corp <corporation_name> | <corporation_id>
     """
+    logger.info(f"{ctx.author.name} used !corp {args}")
     try:
         name = " ".join(args)
         id = lookup(name, 'corporations')

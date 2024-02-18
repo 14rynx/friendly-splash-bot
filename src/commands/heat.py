@@ -1,6 +1,11 @@
-from discord.ext import commands
+import logging
 
+from discord.ext import commands
 from utils import unix_style_arg_parser
+
+# Configure the logger
+logger = logging.getLogger('discord.heat')
+logger.setLevel(logging.INFO)
 
 
 class MessageFunctor:
@@ -79,7 +84,7 @@ async def heat(ctx, *args):
          [--factor <heat_attenuation>]
          [--all | -a]"
     """
-
+    logger.info(f"{ctx.author.name} used !heat {args}")
     arguments = unix_style_arg_parser(args)
 
     try:

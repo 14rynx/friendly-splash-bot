@@ -1,8 +1,12 @@
+import logging
 import math
 
 from discord.ext import commands
-
 from utils import convert, unix_style_arg_parser
+
+# Configure the logger
+logger = logging.getLogger('discord.heat')
+logger.setLevel(logging.INFO)
 
 
 class State:
@@ -171,6 +175,7 @@ async def roll(ctx, *args):
         --<Ship_name>|-<ship_letter> <mass1> [<mass2>, ...]
         [--<ship_name_2>| ...]*
     """
+    logger.info(f"{ctx.author.name} used !roll {args}")
 
     arguments = unix_style_arg_parser(args)
 
@@ -188,7 +193,7 @@ async def roll(ctx, *args):
         else:
             await ctx.send("**Rolling like this is not possible.**")
     except Exception as e:
-        await ctx.send("Could not use this data to calculate a valid rolling solution. " + help_message)
+        await ctx.send("Could not use this data to calculate a valid rolling solution.")
 
 
 async def setup(bot):

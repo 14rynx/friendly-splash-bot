@@ -1,11 +1,15 @@
 import datetime
+import logging
 
 import discord
-from discord.ext import commands
-
 from commands.killbucket.statistics import gather_buckets, make_plot
 from commands.killbucket.text_generator import judgment_phrase_generator, start_phrase_generator, help_text
+from discord.ext import commands
 from utils import lookup, unix_style_arg_parser
+
+# Configure the logger
+logger = logging.getLogger('discord.killbucket')
+logger.setLevel(logging.INFO)
 
 
 @commands.command()
@@ -16,6 +20,7 @@ async def killbucket(ctx, *args):
         -a|--alliance <alliance_name>|<alliance_id>
     [-d|--days <days_to_querry> | --alltime]
     """
+    logger.info(f"{ctx.author.name} used !killbucket {args}")
     arguments = unix_style_arg_parser(args)
 
     try:
@@ -88,6 +93,7 @@ async def linkkb(ctx, *args):
     """
     !linkkb <character_name>|<character_id>
     """
+    logger.info(f"{ctx.author.name} used !linkkb {args}")
     try:
         await ctx.send(f"https://zkillboard.com/character/{lookup(' '.join(*args), 'characters')}/")
     except ValueError:

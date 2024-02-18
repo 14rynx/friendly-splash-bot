@@ -47,7 +47,7 @@ async def get_abyssals_mutamarket(type_id: int):
     async with aiohttp.ClientSession() as session:
         async with session.get(f"https://mutamarket.com/modules/json/type/{type_id}/") as response:
             for item in await response.json():
-                if item.get("contract").get("type") == "item_exchange" and item.get("contract").get(
+                if item.get("contract") and item.get("contract").get("type") == "item_exchange" and item.get("contract").get(
                         "region_id") == 10000002:
                     yield DamageMod(
                         price=item.get("contract").get("unified_price"),
