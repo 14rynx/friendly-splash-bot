@@ -34,8 +34,9 @@ async def send_best(ctx, min_price, max_price, implants):
 
     sorter = RelationalSorter([(c.price, c.bonus) for c in combinations(implants)])
     filtered_combinations = [x for x in combinations(implants) if convert(min_price) <= x.price <= convert(max_price)]
-    ret = "\n".join(
-        map(str, sorted(filtered_combinations, key=lambda x: sorter((x.price, x.bonus)), reverse=True)[:3]))
+
+    best_sets = sorted(filtered_combinations, key=lambda x: sorter((x.price, x.bonus)), reverse=True)[:3]
+    ret = "\n".join([x.str_with_efficiency(sorter((x.price, x.bonus))) for x in best_sets])
 
     if ret == "":
         ret = "No implant sets found for that price range! \n Make sure you give the price in ISK, you can use k / m / b as modifiers for thousands / millions / billions."
