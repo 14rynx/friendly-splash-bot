@@ -44,6 +44,12 @@ class ImplantSet:
 
     def __str__(self):
         if self.bonus == 1:
-            return "**No stat increase for 0 isk (*infinite value!*)**\n"
+            return "**No stat increase for 0 isk ** (*infinite value!*)\n"
         return f"**{self.bonus:.4} stat increase for {isk(self.price)} ** ({isk(self.price / (self.bonus - 1) / 100)} per %):\n" \
+               f"{''.join(str(i) for i in self.implants)}"
+
+    def str_with_efficiency(self, efficiency=1.0):
+        if self.bonus == 1:
+            return f"**No stat increase for 0 isk ** (*infinite value!*) (Efficiency: {efficiency})\n"
+        return f"**{self.bonus:.4} stat increase for {isk(self.price)} ** ({isk(self.price / (self.bonus - 1) / 100)} per %) (Efficiency: {efficiency}):\n" \
                f"{''.join(str(i) for i in self.implants)}"
