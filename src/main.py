@@ -14,11 +14,11 @@ bot = commands.Bot(command_prefix='!', intents=intent)
 extensions = [
     "commands.damage_mods.damage_mods",
     "commands.implants.implants",
-    "commands.killbucket.killbucket",
-    "commands.blobfactor",
-    "commands.corp",
-    "commands.heat",
-    "commands.rolling",
+    # "commands.killbucket.killbucket",
+    # "commands.blobfactor",
+    # "commands.corp",
+    # "commands.heat",
+    # "commands.rolling",
     "commands.stonks",
     "commands.teams",
     "commands.multi_abyssals.multi"
