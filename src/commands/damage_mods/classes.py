@@ -25,15 +25,15 @@ class DamageMod:
             self.from_attributes(attributes)
 
     def from_attributes(self, attributes):
-        for attribute in attributes:
-            if attribute["attribute_id"] == 50:
-                self.cpu = attribute["value"]
-            if attribute["attribute_id"] == 64:
-                self.damage = attribute["value"]
-            if attribute["attribute_id"] == 213:
-                self.damage = attribute["value"]
-            if attribute["attribute_id"] == 204:
-                self.rof = attribute["value"]
+        for attribute_id, value in attributes.items():
+            if attribute_id == 50:
+                self.cpu = value
+            if attribute_id == 64:
+                self.damage = value
+            if attribute_id == 213:
+                self.damage = value
+            if attribute_id == 204:
+                self.rof = value
         return self
 
     def __str__(self):

@@ -39,23 +39,46 @@ async def get_abyssals_esi(type_id: int):
                     if "dogma_attributes" not in item_attributes:
                         continue
 
-                    yield DamageMod(price=c_price, type_id=i_type_id, module_id=i_item_id, contract_id=c_id,
-                                    attributes=item_attributes["dogma_attributes"])
+                    attributes = {a.get("attribute_id"): a.get("value") for a in item_attributes.get("dogma_attributes", {})}
+
+                    yield DamageMod(
+                        price=c_price,
+                        type_id=i_type_id,
+                        module_id=i_item_id,
+                        contract_id=c_id,
+                        attributes=attributes,
+                    )
 
 
 async def get_abyssals_mutamarket(type_id: int):
     async with aiohttp.ClientSession() as session:
-        async with session.get(f"https://mutamarket.com/modules/json/type/{type_id}/no-multi-item-contracts") as response:
+        async with session.get(
+                f"https://mutamarket.com/api/modules/type/{type_id}/item-exchange/contracts-only/") as response:
             for item in await response.json():
-                if item.get("contract") and item.get("contract").get("type") == "item_exchange" and item.get("contract").get(
-                        "region_id") == 10000002:
-                    yield DamageMod(
-                        price=item.get("contract").get("unified_price"),
-                        type_id=item.get("mutator_type_id"),
-                        module_id=item.get("id"),
-                        contract_id=item.get("contract").get("id"),
-                        attributes=item.get("attributes")
-                    )
+                if not (contract := item.get("contract")):
+                    continue
+
+                if not contract.get("type") == "item_exchange":
+                    continue
+
+                if not contract.get("region_id", 10000002) == 10000002:
+                    continue
+
+                if not contract.get("plex_count", 0) == 0:
+                    continue
+
+                if contract.get("asking_for_items", True):
+                    continue
+
+                attributes = {a.get("id"): a.get("value") for a in item.get("mutated_attributes", [])}
+
+                yield DamageMod(
+                    price=contract.get("price"),
+                    type_id=item.get("mutator_type_id"),
+                    module_id=item.get("id"),
+                    contract_id=contract.get("id"),
+                    attributes=attributes,
+                )
 
 
 async def get_cheapest(item_ids):
