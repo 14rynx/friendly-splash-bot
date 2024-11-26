@@ -33,7 +33,7 @@ def filter_modules(modules: list[DamageMod]) -> list[DamageMod]:
     for module in modules:
         for other_module in modules:
             if (module.cpu > other_module.cpu and
-                    module.rof < other_module.rof and
+                    module.rof > other_module.rof and
                     module.damage < other_module.damage and
                     module.price > other_module.price):
                 modules_to_remove.add(module)
