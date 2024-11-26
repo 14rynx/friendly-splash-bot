@@ -143,6 +143,10 @@ class RelationalSorter:
             return y1
 
     def __init__(self, all_points):
+        # Add edge points to make sure it works properly
+        all_points.append((0, 0))
+        all_points.append((float("inf"), max([y for x, y in all_points])))
+
         self.best = list(sorted(all_points, key=lambda x: x[0]))
 
         old_len = 0
