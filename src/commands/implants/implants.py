@@ -215,6 +215,19 @@ async def _harvests():
         set_multiplier_id=1219,
     )
 
+@alru_cache(ttl=1800)
+async def _nirvanas():
+    return await implants_from_ids(
+        [
+            53853, 53854, 53855, 53856, 53857, 53839,  # LG
+            53704, 53705, 53708, 53706, 53707, 53709,  # MG
+            53710, 53711, 53715, 53712, 53713, 53714,  # MG
+            27105, 3080, 10228, 3081, 16246, 3084  # SM-70x
+        ],
+        set_bonus_id=3015,
+        set_multiplier_id=3017,
+        bonus_ids=[337]
+    )
 
 @alru_cache(ttl=1800)
 async def _nomads():
@@ -351,6 +364,14 @@ async def harvests(ctx, min_price, max_price):
     logger.info(f"{ctx.author.name} used !harvests {min_price} {max_price}")
     await send_best(ctx, min_price, max_price, await _harvests())
 
+@commands.command()
+async def nirvanas(ctx, min_price, max_price):
+    """
+    !nirvanas <min_price> <max_price>
+    """
+    logger.info(f"{ctx.author.name} used !nirvanas {min_price} {max_price}")
+    await send_best(ctx, min_price, max_price, await _nirvanas())
+
 
 @commands.command()
 async def nomads(ctx, min_price, max_price):
@@ -383,5 +404,6 @@ async def setup(bot):
     bot.add_command(raptures)
     bot.add_command(saviors)
     bot.add_command(harvests)
+    bot.add_command(nirvanas)
     bot.add_command(nomads)
     bot.add_command(virtues)
