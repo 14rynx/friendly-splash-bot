@@ -40,7 +40,12 @@ async def explain(ctx, zkill_link):
     kill_hash = await get_hash(kill_id)
     kill_data = await get_kill(kill_id, kill_hash)
 
-    victim_rig_size = await get_rig_size(kill_data["victim"]["ship_type_id"])
+    victim_ship_type_id = kill_data.get("victim", {}).get("ship_type_id")
+    if victim_ship_type_id:
+        victim_rig_size = await get_rig_size(victim_ship_type_id)
+    else:
+        victim_rig_size = 1
+
     base_points = 5 ** victim_rig_size
 
     out.append(f"Ship Base Points: {base_points}")
@@ -48,21 +53,24 @@ async def explain(ctx, zkill_link):
     # Items on Victim Ship Stuff
     out.append("Looking at Items:")
     danger = 0
-    for item in kill_data["victim"]["items"]:
-        type_id = item["item_type_id"]
+    for item in kill_data.get("victim", {}).get("items", []):
+        type_id = item.get("item_type_id")
         quantity = item.get("quantity_dropped", 0) + item.get("quantity_destroyed", 0)
+
+        if not type_id:
+            continue
 
         if await get_category_id(type_id) != 7:
             continue
 
-        if "flag" in item and 11 <= item["flag"] < 35 or 125 <= item["flag"] < 129:
+        if "flag" in item and 11 <= item.get("flag", -1) < 35 or 125 <= item.get("flag", -1) < 129:
             meta = 1 + await get_meta_level(type_id) // 2
 
-            if await is_heatable(item) or await is_dda(item):
+            if await is_heatable(type_id) or await is_dda(type_id):
                 out.append(f"   {quantity}x {await get_item_name(type_id)} added {meta}")
                 danger += quantity * meta
 
-            if await is_miner(item):
+            if await is_miner(type_id):
                 out.append(f"   {quantity}x {await get_item_name(type_id)} subtracted {meta}")
                 danger -= quantity * meta
 
@@ -74,7 +82,7 @@ async def explain(ctx, zkill_link):
         out.append(f"=> Increased Points to {floor(points)} (by {danger}) due to items fitted.")
 
     # Reducing things by amount of Attackers
-    attackers_amount = len(kill_data["attackers"])
+    attackers_amount = len(kill_data.get("attackers", []))
     involved_penalty = max(1.0, attackers_amount ** 2 / 2)
 
     out.append(f"Looking at attacker amount:")
@@ -87,19 +95,23 @@ async def explain(ctx, zkill_link):
     out.append("Looking at attacker sizes:")
     characters = 0
     attackers_total_size = 0
-    for attacker in kill_data["attackers"]:
-        if await is_structure(attacker["ship_type_id"]):
+    for attacker in kill_data.get("attackers", []):
+        ship_type_id = attacker.get("ship_type_id")
+        if not ship_type_id:
+            continue
+
+        if await is_structure(ship_type_id):
             out.append("Structure on Killmail => Giving 1 Point and throwing everything else out the window.")
             return 1
 
         if "character_id" in attacker:
             characters += 1
-            group_id = await get_group_id(attacker["ship_type_id"])
-            rig_size = await get_rig_size(attacker["ship_type_id"])
+            group_id = await get_group_id(ship_type_id)
+            rig_size = await get_rig_size(ship_type_id)
             if group_id == 29:  # Capsule
                 attackers_total_size += 5 ** (victim_rig_size + 1)
                 out.append(
-                    f"   {await get_item_name(attacker['ship_type_id'])} added {5 ** (victim_rig_size + 1)} to enemy size")
+                    f"   Capsule added {5 ** (victim_rig_size + 1)} to enemy size")
             else:
                 attackers_total_size += 5 ** rig_size
                 out.append(
