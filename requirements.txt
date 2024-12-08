@@ -6,3 +6,4 @@ aiohttp
 certifi
 requests
 async-lru
+aiocache

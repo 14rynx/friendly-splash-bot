@@ -1,12 +1,8 @@
-import logging
 import math
 
 from discord.ext import commands
-from utils import convert, unix_style_arg_parser
 
-# Configure the logger
-logger = logging.getLogger('discord.heat')
-logger.setLevel(logging.INFO)
+from utils import convert, unix_style_arg_parser, command_error_handler
 
 
 class State:
@@ -169,31 +165,27 @@ def metasolver(state):
 
 
 @commands.command()
+@command_error_handler
 async def roll(ctx, *args):
     """
     !roll <wh_nominal_mass>
         --<Ship_name>|-<ship_letter> <mass1> [<mass2>, ...]
         [--<ship_name_2>| ...]*
     """
-    logger.info(f"{ctx.author.name} used !roll {args}")
 
     arguments = unix_style_arg_parser(args)
 
-    try:
-        # Todo: Additional Arguments
-        wh = State(
-            convert(arguments[""][0]),  # already_through_min=2800, already_through_max=2800),
-            [Ship(name, [convert(v) for v in values]) for name, values in arguments.items() if name != ""]
-        )
+    wh = State(
+        convert(arguments[""][0]),  # already_through_min=2800, already_through_max=2800),
+        [Ship(name, [convert(v) for v in values]) for name, values in arguments.items() if name != ""]
+    )
 
-        works, path = metasolver(wh)
+    works, path = metasolver(wh)
 
-        if works:
-            await ctx.send("**It works, as following**\n" + print_path(path))
-        else:
-            await ctx.send("**Rolling like this is not possible.**")
-    except Exception as e:
-        await ctx.send("Could not use this data to calculate a valid rolling solution.")
+    if works:
+        await ctx.send("**It works, as following**\n" + print_path(path))
+    else:
+        await ctx.send("**Rolling like this is not possible.**")
 
 
 async def setup(bot):

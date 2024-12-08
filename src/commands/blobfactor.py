@@ -1,15 +1,13 @@
-import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 
 from discord.ext import commands
-from utils import lookup, gather_kills, unix_style_arg_parser
 
-# Configure the logger
-logger = logging.getLogger('discord.blobfactor')
-logger.setLevel(logging.INFO)
+from network import id_lookup, fetch_kill_until
+from utils import unix_style_arg_parser, command_error_handler
 
 
 @commands.command()
+@command_error_handler
 async def blobfactor(ctx, *args):
     """
     !blobfactor <character_name> | <character_id> |
@@ -17,64 +15,62 @@ async def blobfactor(ctx, *args):
             -a|--alliance <alliance_name>|<alliance_id>
         [-d|--days <days_to_querry> | --alltime]
     """
-    logger.info(f"{ctx.author.name} used !blobfactor {args}")
     arguments = unix_style_arg_parser(args)
 
-    try:
-        # Config
-        character_days = 180
-        corporation_days = 30
-        alliance_days = 14
+    # Config
+    character_days = 180
+    corporation_days = 30
+    alliance_days = 14
 
-        if "alliance" in arguments or "a" in arguments:
-            name = " ".join(arguments["a"] if "a" in arguments else arguments["alliance"])
-            id = lookup(name, 'alliances')
-            querry = "allianceID"
-            days = alliance_days
-        elif "corporation" in arguments or "c" in arguments:
-            name = " ".join(arguments["c"] if "c" in arguments else arguments["corporation"])
-            id = lookup(name, 'corporations')
-            querry = "corporationID"
-            days = corporation_days
-        else:
-            name = " ".join(arguments[""])
-            id = lookup(name, 'characters')
-            querry = "characterID"
-            days = character_days
+    if "alliance" in arguments or "a" in arguments:
+        name = " ".join(arguments["a"] if "a" in arguments else arguments["alliance"])
+        id = id_lookup(name, 'alliances')
+        url = f"https://zkillboard.com/api/kills/allianceID/{id}/kills/"
+        days = alliance_days
+    elif "corporation" in arguments or "c" in arguments:
+        name = " ".join(arguments["c"] if "c" in arguments else arguments["corporation"])
+        id = id_lookup(name, 'corporations')
+        url = f"https://zkillboard.com/api/kills/corporationID/{id}/kills/"
+        days = corporation_days
+    else:
+        name = " ".join(arguments[""])
+        id = id_lookup(name, 'characters')
+        url = f"https://zkillboard.com/api/kills/characterID/{id}/kills/"
+        days = character_days
 
-        if "days" in arguments:
-            days = int(arguments["days"][0])
-        elif "d" in arguments:
-            days = int(arguments["d"][0])
+    if "days" in arguments:
+        days = int(arguments["days"][0])
+    elif "d" in arguments:
+        days = int(arguments["d"][0])
 
-        until = datetime.utcnow() - timedelta(days=days)
+    until = datetime.now(UTC) - timedelta(days=days)
 
-        if "alltime" in arguments:
-            until = datetime(2003, 5, 6, 0, 0)  # Eve release date
-            days = (datetime.utcnow() - until).days
+    if "alltime" in arguments:
+        until = datetime(2003, 5, 6, 0, 0)  # Eve release date
+        days = (datetime.now(UTC) - until).days
 
-        friendlies = []
-        kills = await gather_kills(f"https://zkillboard.com/api/kills/{querry}/{id}/kills/", until)
-        for kill in kills:
-            friendlies.extend(kill['attackers'])
+    friendlies = []
+    kills = []
+    async for kill in await fetch_kill_until(f"{url}/kills/", until):
+        kills.append(kill)
+        friendlies.extend(kill['attackers'])
 
-        enemies = []
-        losses = await gather_kills(f"https://zkillboard.com/api/kills/{querry}/{id}/losses/", until)
-        for loss in losses:
-            enemies.extend(loss['attackers'])
+    enemies = []
+    losses = []
+    async for loss in await fetch_kill_until(f"{url}/losses/", until):
+        losses.append(loss)
+        enemies.extend(loss['attackers'])
 
-        if "thirdparty" in arguments and arguments["thirdparty"] == ["no"]:  # WTF is this!?
-            friendlies = [f for f in friendlies if "corporation_id" in f and f["corporation_id"] == 98633005]
-            enemies = [e for e in enemies if "corporation_id" in e and e["corporation_id"] != 98633005]
+    if "thirdparty" in arguments and arguments["thirdparty"] == ["no"]:  # WTF is this!?
+        friendlies = [f for f in friendlies if "corporation_id" in f and f["corporation_id"] == 98633005]
+        enemies = [e for e in enemies if "corporation_id" in e and e["corporation_id"] != 98633005]
 
-        await ctx.send(
-            f"**{name}'s last {days} days ** (analyzed {len(kills)} kills and {len(losses)} losses) \n"
-            f"Average Pilots on kill: {len(friendlies) / len(kills) :.2f}\n"
-            f"Average Enemies on loss: {len(enemies) / len(losses) :.2f}\n"
-            f"Blob Factor: {len(friendlies) / len(kills) * len(losses) / len(enemies) :.2f}"
-        )
-    except Exception as e:
-        await ctx.send("Could not find data for that.")
+    await ctx.send(
+        f"**{name}'s last {days} days ** (analyzed {len(kills)} kills and {len(losses)} losses) \n"
+        f"Average Pilots on kill: {len(friendlies) / len(kills) :.2f}\n"
+        f"Average Enemies on loss: {len(enemies) / len(losses) :.2f}\n"
+        f"Blob Factor: {len(friendlies) / len(kills) * len(losses) / len(enemies) :.2f}"
+    )
 
 
 async def setup(bot):

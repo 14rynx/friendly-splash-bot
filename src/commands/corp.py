@@ -1,43 +1,22 @@
 import asyncio
-import logging
 import ssl
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 
 import aiohttp
 import certifi
 from discord.ext import commands
-from utils import lookup, gather_kills
 
-# Configure the logger
-logger = logging.getLogger('discord.corp')
-logger.setLevel(logging.INFO)
-
-
-async def get_corp_name(corporation_id, session):
-    async with session.get(f"https://esi.evetech.net/latest/corporations/{corporation_id}/") as response:
-        return (await response.json(content_type=None))[
-            "name"] if response.status == 200 else f"Could not load corp name for {corporation_id}"
-
-
-async def get_corp_member_count(corporation_id, session):
-    async with session.get(f"https://esi.evetech.net/latest/corporations/{corporation_id}/") as response:
-        return (await response.json(content_type=None))[
-            "member_count"] if response.status == 200 else f"Could not load corp member count for {corporation_id}"
-
-
-async def get_character_corporation(character_id, session):
-    async with session.get(f"https://esi.evetech.net/latest/characters/{character_id}/") as response:
-        return (await response.json(content_type=None))["corporation_id"] if response.status == 200 else 0
+from network import id_lookup, fetch_kill_until, get_character_corporation, get_corp_name, get_corp_member_count
+from utils import command_error_handler
 
 
 async def get_corp_statistics(corporation_id):
     days = 30
 
     # Gather Data from API
-    kills = await gather_kills(f"https://zkillboard.com/api/kills/corporationID/{corporation_id}/kills/",
-                               datetime.utcnow() - timedelta(days=days))
-    losses = await gather_kills(f"https://zkillboard.com/api/kills/corporationID/{corporation_id}/losses/",
-                                datetime.utcnow() - timedelta(days=days))
+    url = f"https://zkillboard.com/api/kills/corporationID/{corporation_id}"
+    kills = await fetch_kill_until(f"{url}/kills/", datetime.now(UTC) - timedelta(days=days))
+    losses = await fetch_kill_until(f"{url}/losses/", datetime.now(UTC) - timedelta(days=days))
 
     # Count Friendlies
     friendlies = 0
@@ -137,19 +116,16 @@ async def get_corp_statistics(corporation_id):
 
 
 @commands.command()
+@command_error_handler
 async def corp(ctx, *args):
     """
     !corp <corporation_name> | <corporation_id>
     """
-    logger.info(f"{ctx.author.name} used !corp {args}")
-    try:
-        name = " ".join(args)
-        id = lookup(name, 'corporations')
+    name = " ".join(args)
+    id = id_lookup(name, 'corporations')
 
-        response = await get_corp_statistics(id)
-        await ctx.send(response)
-    except Exception as e:
-        await ctx.send("Could not use arguments.")
+    response = await get_corp_statistics(id)
+    await ctx.send(response)
 
 
 async def setup(bot):

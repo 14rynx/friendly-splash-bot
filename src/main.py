@@ -12,16 +12,17 @@ client = discord.Client(intents=intent)
 bot = commands.Bot(command_prefix='!', intents=intent)
 
 extensions = [
-    "commands.damage_mods.damage_mods",
-    "commands.implants.implants",
-    # "commands.killbucket.killbucket",
+    "commands.abyssal_damage_mods",
+    "commands.implants",
+    # "commands.killbucket",
     # "commands.blobfactor",
     # "commands.corp",
-    # "commands.heat",
-    # "commands.rolling",
+    # "commands.heat", # Deactivated due to needing explanation / rework
+    # "commands.rolling", # Deactivated due to np-hard and no good limits
     "commands.stonks",
     "commands.teams",
-    "commands.multi_abyssals.multi"
+    "commands.abyssal_anything",
+    # "commands.zkill",
 ]
 
 for extension in extensions:

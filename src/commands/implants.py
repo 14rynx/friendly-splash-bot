@@ -1,16 +1,109 @@
+import asyncio
 import itertools
-import logging
 
+import aiohttp
 from async_lru import alru_cache
-from commands.implants.classes import ImplantSet, Implant
-from commands.implants.network import implants_from_ids
 from discord.ext import commands
-from utils import RelationalSorter, unix_style_arg_parser
-from utils import convert
 
-# Configure the logger
-logger = logging.getLogger('discord.killbucket')
-logger.setLevel(logging.INFO)
+from network import get_item_name, get_item_price, get_dogma_attributes
+from utils import RelationalSorter, unix_style_arg_parser, convert, command_error_handler, isk
+
+
+class Implant:
+    """Holds all the numbers for one implant."""
+
+    def __init__(self, type_id=0, name="", price=0, slot=1, set_bonus=0.0, set_multiplier=1.0, bonus=0.0):
+        self.name = name
+        self.slot = slot
+        self.type_id = type_id
+        self.set_bonus = set_bonus
+        self.set_multiplier = set_multiplier
+        self.bonus = bonus
+        self.price = price
+
+    def __str__(self):
+        if self.name == "":
+            return ""
+        else:
+            return self.name + "\n"
+
+
+class ImplantSet:
+    """Holds all the numbers for a set of implants which affect the same attribute."""
+
+    def __init__(self, implants):
+        self.implants = implants
+        self.relational_efficiency = 0
+
+    @property
+    def bonus(self):
+        multiplier = 1
+        for implant in self.implants:
+            multiplier *= implant.set_multiplier
+
+        bonus = 1
+        for implant in self.implants:
+            bonus *= (1 + implant.bonus * 0.01) * (1 + implant.set_bonus * 0.01 * multiplier)
+        return bonus
+
+    @property
+    def price(self):
+        return sum(implant.price for implant in self.implants)
+
+    def __str__(self):
+        if self.bonus == 1:
+            return "**No stat increase for 0 isk ** (*infinite value!*)\n"
+        return f"**{self.bonus:.4} stat increase for {isk(self.price)} ** ({isk(self.price / (self.bonus - 1) / 100)} per %):\n" \
+               f"{''.join(str(i) for i in self.implants)}"
+
+    def str_with_efficiency(self, efficiency=1.0):
+        if self.bonus == 1:
+            return f"**No stat increase for 0 isk ** (*infinite value!*) (Efficiency: {efficiency})\n"
+        return f"**{self.bonus:.4} stat increase for {isk(self.price)} ** ({isk(self.price / (self.bonus - 1) / 100)} per %) (Efficiency: {efficiency}):\n" \
+               f"{''.join(str(i) for i in self.implants)}"
+
+
+async def implant_from_id(session, type_id, set_bonus_id=None, set_malus_id=None, set_multiplier_id=None,
+                          bonus_ids=None, malus_ids=None):
+    name = await get_item_name(type_id)
+    price = await get_item_price(type_id)
+    attributes = await get_dogma_attributes(type_id)
+    slot = int(attributes.get(331))
+
+    if set_multiplier_id in attributes:  # The implant is part of a set
+        if set_bonus_id:
+            set_bonus = float(attributes.get(set_bonus_id, 0))
+        elif set_malus_id:
+            set_bonus = 100 / (1 + float(attributes.get(set_malus_id, 0)) * 0.01) - 100  # Convert to Bonus scale
+        else:
+            raise ValueError("Bonus / Malus id for Implant Set not correct!")
+        set_multiplier = float(attributes.get(set_multiplier_id, 0))
+        return Implant(type_id, name, price, slot, set_bonus=set_bonus, set_multiplier=set_multiplier)
+
+    else:  # The Implant is not part of a set
+        bonus = None
+        if bonus_ids:
+            for bonus_id in bonus_ids:
+                if bonus_id in attributes:
+                    bonus = float(attributes[bonus_id])
+        if malus_ids:
+            for malus_id in malus_ids:
+                if malus_id in attributes:
+                    bonus = 100 / (1 + float(attributes[malus_id]) * 0.01) - 100  # Convert to Bonus scale
+        if not bonus:
+            raise ValueError("Bonus / Malus id for Hardwiring not correct!")
+        return Implant(type_id, name, price, slot, bonus=bonus)
+
+
+async def implants_from_ids(type_ids, set_bonus_id=None, set_malus_id=None, set_multiplier_id=None, bonus_ids=None,
+                            malus_ids=None):
+    async with aiohttp.ClientSession() as session:
+        tasks = [
+            implant_from_id(session, type_id, set_bonus_id, set_malus_id, set_multiplier_id, bonus_ids, malus_ids)
+            for type_id in type_ids
+        ]
+        implants = await asyncio.gather(*tasks)
+        return implants
 
 
 def combinations(implants):
@@ -215,6 +308,7 @@ async def _harvests():
         set_multiplier_id=1219,
     )
 
+
 @alru_cache(ttl=1800)
 async def _nirvanas():
     return await implants_from_ids(
@@ -228,6 +322,7 @@ async def _nirvanas():
         set_multiplier_id=3017,
         bonus_ids=[337]
     )
+
 
 @alru_cache(ttl=1800)
 async def _nomads():
@@ -258,136 +353,137 @@ async def _virtues():
 
 
 @commands.command()
+@command_error_handler
 async def ascendancies(ctx, min_price, max_price):
     """
     !ascendancies <min_price> <max_price>
     """
-    logger.info(f"{ctx.author.name} used !ascendancies {min_price} {max_price}")
     await send_best(ctx, min_price, max_price, await _ascendancies())
 
 
 @commands.command()
+@command_error_handler
 async def asklepians(ctx, min_price, max_price):
     """
     !asklepians <min_price> <max_price>
     """
-    logger.info(f"{ctx.author.name} used !asklepians {min_price} {max_price}")
     await send_best(ctx, min_price, max_price, await _asklepians())
 
 
 @commands.command()
+@command_error_handler
 async def amulets(ctx, min_price, max_price):
     """
     !amulets <min_price> <max_price>
     """
-    logger.info(f"{ctx.author.name} used !amulets {min_price} {max_price}")
     await send_best(ctx, min_price, max_price, await _amulets())
 
 
 @commands.command()
+@command_error_handler
 async def crystals(ctx, min_price, max_price):
     """
     !crystals <min_price> <max_price>
     """
-    logger.info(f"{ctx.author.name} used !crystals {min_price} {max_price}")
     await send_best(ctx, min_price, max_price, await _crystals())
 
 
 @commands.command()
+@command_error_handler
 async def talismans(ctx, min_price, max_price):
     """
     !talismans <min_price> <max_price>
     """
-    logger.info(f"{ctx.author.name} used !talismans {min_price} {max_price}")
     await send_best(ctx, min_price, max_price, await _talismans())
 
 
 @commands.command()
+@command_error_handler
 async def snakes(ctx, min_price, max_price):
     """
     !snakes <min_price> <max_price>
     """
-    logger.info(f"{ctx.author.name} used !snakes {min_price} {max_price}")
     await send_best(ctx, min_price, max_price, await _snakes())
 
 
 @commands.command()
+@command_error_handler
 async def halos(ctx, min_price, max_price):
     """
     !halos <min_price> <max_price>
     """
-    logger.info(f"{ctx.author.name} used !halos {min_price} {max_price}")
     await send_best(ctx, min_price, max_price, await _halos())
 
 
 @commands.command()
+@command_error_handler
 async def hydras(ctx, min_price, max_price):
     """
     !hydras <min_price> <max_price>
     """
-    logger.info(f"{ctx.author.name} used !hydras {min_price} {max_price}")
     await send_best(ctx, min_price, max_price, await _hydras())
 
 
 @commands.command()
+@command_error_handler
 async def mimesiss(ctx, min_price, max_price):
     """
     !mimesiss <min_price> <max_price>
     """
-    logger.info(f"{ctx.author.name} used !mimesiss {min_price} {max_price}")
     await send_best(ctx, min_price, max_price, await _mimesiss())
 
 
 @commands.command()
+@command_error_handler
 async def raptures(ctx, min_price, max_price):
     """
     !raptures <min_price> <max_price>
     """
-    logger.info(f"{ctx.author.name} used !raptures {min_price} {max_price}")
     await send_best(ctx, min_price, max_price, await _raptures())
 
 
 @commands.command()
+@command_error_handler
 async def saviors(ctx, min_price, max_price):
     """
     !saviors <min_price> <max_price>
     """
-    logger.info(f"{ctx.author.name} used !saviors {min_price} {max_price}")
     await send_best(ctx, min_price, max_price, await _saviors())
 
 
 @commands.command()
+@command_error_handler
 async def harvests(ctx, min_price, max_price):
     """
     !harvests <min_price> <max_price>
     """
-    logger.info(f"{ctx.author.name} used !harvests {min_price} {max_price}")
     await send_best(ctx, min_price, max_price, await _harvests())
 
+
 @commands.command()
+@command_error_handler
 async def nirvanas(ctx, min_price, max_price):
     """
     !nirvanas <min_price> <max_price>
     """
-    logger.info(f"{ctx.author.name} used !nirvanas {min_price} {max_price}")
     await send_best(ctx, min_price, max_price, await _nirvanas())
 
 
 @commands.command()
+@command_error_handler
 async def nomads(ctx, min_price, max_price):
     """
     !nomads <min_price> <max_price>
     """
-    logger.info(f"{ctx.author.name} used !nomads {min_price} {max_price}")
     await send_best(ctx, min_price, max_price, await _nomads())
 
 
 @commands.command()
+@command_error_handler
 async def virtues(ctx, min_price, max_price):
     """
     !virtues <min_price> <max_price>
     """
-    logger.info(f"{ctx.author.name} used !virtues {min_price} {max_price}")
     await send_best(ctx, min_price, max_price, await _virtues())
 
 

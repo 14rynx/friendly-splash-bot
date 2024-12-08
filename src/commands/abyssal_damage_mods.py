@@ -1,15 +1,149 @@
-import logging
+import asyncio
+import math
 
 from async_lru import alru_cache
-from commands.damage_mods.classes import DamageMod, DamageModSet
-from commands.damage_mods.network import get_cheapest, get_abyssals_mutamarket
 from discord.ext import commands
-from utils import RelationalSorter, unix_style_arg_parser
+
+from network import get_item_price, get_item_name, get
+from utils import RelationalSorter, unix_style_arg_parser, command_error_handler, isk
 from utils import convert
 
-# Configure the logger
-logger = logging.getLogger('discord.damage_mods')
-logger.setLevel(logging.INFO)
+
+class DamageMod:
+    def __init__(self, cpu=100, damage=1.0, rof=1.0, price=1e50, type_id=None, module_id=None, contract_id=None,
+                 attributes=None):
+        self.cpu = cpu
+        self.damage = damage
+        self.rof = rof
+        self.price = price
+
+        self.type_id = type_id
+        self.module_id = module_id
+        self.contract_id = contract_id
+
+        if attributes is not None:
+            self.from_attributes(attributes)
+
+    def from_attributes(self, attributes):
+        for attribute_id, value in attributes.items():
+            if attribute_id == 50:
+                self.cpu = value
+            if attribute_id == 64:
+                self.damage = value
+            if attribute_id == 213:
+                self.damage = value
+            if attribute_id == 204:
+                self.rof = value
+        return self
+
+    def __str__(self):
+        return asyncio.run(self.async_str())
+
+    async def async_str(self, number=1):
+        if self.module_id is None:
+            return await get_item_name(self.type_id)
+        else:
+            return (f"[Abyssal Module {number}](https://mutamarket.com/modules/{self.module_id}) "
+                    f"Contract: <url=contract:30000142//{self.contract_id}>Contract {self.contract_id}</url>")
+
+
+class DamageModSet:
+    @staticmethod
+    def stacking(u):
+        return math.exp(-(u / 2.67) ** 2)
+
+    def __init__(self, damage_mods: list):
+        self.damage_mods = damage_mods
+
+    @property
+    def damage_multiplier(self):
+        return self.get_damage_multiplier()
+
+    def get_damage_multiplier(self, uptime=1, rof_rig="", damage_rig=""):
+
+        damage_multipliers = [x.damage for x in self.damage_mods]
+        if damage_rig.lower() == "t1":
+            damage_multipliers.append(1.1)
+        if damage_rig.lower() == "t2":
+            damage_multipliers.append(1.15)
+        if damage_rig.lower() == "t1x2":
+            damage_multipliers.extend([1.1, 1.1])
+
+        damage_increase = 1
+        for x, value in enumerate(sorted(damage_multipliers, reverse=True)):
+            damage_increase *= (1 + ((value - 1) * self.stacking(x)))
+
+        rof_multipliers = [x.rof for x in self.damage_mods]
+        if rof_rig.lower() == "t1":
+            rof_multipliers.append(1 / 1.1)
+        if rof_rig.lower() == "t2":
+            rof_multipliers.append(1 / 1.15)
+        if rof_rig.lower() == "t1x2":
+            rof_multipliers.extend([1 / 1.1, 1 / 1.1])
+
+        rof_time_decrease = 1
+        for x, value in enumerate(sorted(rof_multipliers)):
+            rof_time_decrease *= 1 + ((value - 1) * self.stacking(x))
+
+        rof_time_decrease = (uptime * rof_time_decrease + (1 - uptime))
+
+        return damage_increase / rof_time_decrease
+
+    @property
+    def cpu(self):
+        return sum([x.cpu for x in self.damage_mods])
+
+    @property
+    def price(self):
+        return sum([x.price for x in self.damage_mods])
+
+    def __str__(self):
+        return asyncio.run(self.async_str())
+
+    async def async_str(self, efficiency=None):
+        out = f"**CPU: {self.cpu:.2f} Damage: {self.damage_multiplier:.3f} Price: {isk(self.price)}" + \
+              ("**" if efficiency is None else f" (Efficiency: {efficiency})**\n")
+        out += "\n".join([await x.async_str(i + 1) for i, x in enumerate(self.damage_mods)])
+        return out
+
+
+async def get_abyssals_mutamarket(type_id: int):
+    url = f"https://mutamarket.com/api/modules/type/{type_id}/item-exchange/contracts-only/"
+    item_data = await get(url)
+    for item in item_data:
+        if not (contract := item.get("contract")):
+            continue
+
+        if not contract.get("type") == "item_exchange":
+            continue
+
+        if not contract.get("region_id", 10000002) == 10000002:
+            continue
+
+        if not contract.get("plex_count", 0) == 0:
+            continue
+
+        if contract.get("asking_for_items", True):
+            continue
+
+        attributes = {a.get("id"): a.get("value") for a in item.get("mutated_attributes", [])}
+
+        yield DamageMod(
+            price=contract.get("price"),
+            type_id=item.get("mutator_type_id"),
+            module_id=item.get("id"),
+            contract_id=contract.get("id"),
+            attributes=attributes,
+        )
+
+
+async def get_price_with_id(type_id):
+    return type_id, await get_item_price(type_id)
+
+
+async def get_cheapest(item_ids):
+    items = await asyncio.gather(*[get_price_with_id(item_id) for item_id in item_ids])
+    return min(items, key=lambda item: item[1])
 
 
 def module_combinations(repeatable_mods, unique_mods, count) -> list[list[DamageMod]]:
@@ -46,24 +180,38 @@ def filter_modules(modules: list[DamageMod]) -> list[DamageMod]:
 
 
 def best_sets(
-        unique_mods, repeatable_mods,
-        count, min_price, max_price, max_cpu,
-        results=5, **kwargs
+        unique_mods,
+        repeatable_mods,
+        count,
+        min_price,
+        max_price,
+        max_cpu,
+        results=5,
+        **kwargs
 ) -> list[tuple[DamageModSet, float]]:
     """return the best module sets based on all possible module sets, as well as their relative grading"""
     sorting_points = []
     usable_sets = []
     for combination in module_combinations(repeatable_mods, unique_mods, count):
+
         damage_mod_set = DamageModSet(combination)
         if damage_mod_set.cpu < max_cpu:
-            sorting_points.append((float(damage_mod_set.price), float(damage_mod_set.get_damage_multiplier(**kwargs))))
+            sorting_points.append(
+                (
+                    float(damage_mod_set.price),
+                    float(damage_mod_set.get_damage_multiplier(**kwargs))
+                )
+            )
             if min_price < damage_mod_set.price < max_price:
                 usable_sets.append(damage_mod_set)
 
     sorter = RelationalSorter(sorting_points)
 
-    for x in sorted(usable_sets, key=lambda c: sorter((c.price, c.get_damage_multiplier(**kwargs))), reverse=True)[
-             :results]:
+    for x in sorted(
+            usable_sets,
+            key=lambda c: sorter((c.price, c.get_damage_multiplier(**kwargs))),
+            reverse=True
+    )[:results]:
         yield x, sorter((x.price, x.get_damage_multiplier(**kwargs)))
 
 
@@ -223,6 +371,7 @@ async def magstabs_repeatable():
 
 
 @commands.command()
+@command_error_handler
 async def ballistics(ctx, *args):
     """
     !ballistics <slots> <max_cpu> <min_price> <max_price>
@@ -231,11 +380,11 @@ async def ballistics(ctx, *args):
         [-r | -rof_rig <t1, t2, t1x2>]
         [-d | -damage_rig <t1, t2, t1x2>]
     """
-    logger.info(f"{ctx.author.name} used !ballistics {args}")
     await send_best(ctx, args, ballistics_unique, ballistics_repeatable)
 
 
 @commands.command()
+@command_error_handler
 async def entropics(ctx, *args):
     """
     !entropics <slots> <max_cpu> <min_price> <max_price>
@@ -244,11 +393,11 @@ async def entropics(ctx, *args):
         [-r | -rof_rig <t1, t2, t1x2>]
         [-d | -damage_rig <t1, t2, t1x2>]
     """
-    logger.info(f"{ctx.author.name} used !entropics {args}")
     await send_best(ctx, args, entropics_unique, entropics_repeatable)
 
 
 @commands.command()
+@command_error_handler
 async def gyros(ctx, *args):
     """
     !gyros <slots> <max_cpu> <min_price> <max_price>
@@ -257,11 +406,11 @@ async def gyros(ctx, *args):
         [-r | -rof_rig <t1, t2, t1x2>]
         [-d | -damage_rig <t1, t2, t1x2>]
     """
-    logger.info(f"{ctx.author.name} used !gyros {args}")
     await send_best(ctx, args, gyros_unique, gyros_repeatable)
 
 
 @commands.command()
+@command_error_handler
 async def heatsinks(ctx, *args):
     """
     !heatsinks <slots> <max_cpu> <min_price> <max_price>
@@ -270,11 +419,11 @@ async def heatsinks(ctx, *args):
         [-r | -rof_rig <t1, t2, t1x2>]
         [-d | -damage_rig <t1, t2, t1x2>]
     """
-    logger.info(f"{ctx.author.name} used !heatsinks {args}")
     await send_best(ctx, args, heatsinks_unique, heatsinks_repeatable)
 
 
 @commands.command()
+@command_error_handler
 async def magstabs(ctx, *args):
     """
     !magstabs <slots> <max_cpu> <min_price> <max_price>
@@ -283,7 +432,6 @@ async def magstabs(ctx, *args):
         [-r | -rof_rig <t1, t2, t1x2>]
         [-d | -damage_rig <t1, t2, t1x2>]
     """
-    logger.info(f"{ctx.author.name} used !magstabs {args}")
     await send_best(ctx, args, magstabs_unique, magstabs_repeatable)
 
 
