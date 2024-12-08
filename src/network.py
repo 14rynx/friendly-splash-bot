@@ -204,6 +204,10 @@ async def fetch_kill_until(url, start):
         # Make sure we fetch at most one page per second
         kill_hashes, _ = await asyncio.gather(get_kill_page(url, page), asyncio.sleep(1))
 
+        # Ensure we do not continue after empty response
+        if len(kill_hashes) == 0:
+            break
+
         async for kill in gather_kills(kill_hashes):
             if "killmail_time" in kill:
                 # Check if we can stop
