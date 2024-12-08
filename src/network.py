@@ -151,7 +151,7 @@ async def id_lookup(string, return_type):
 
 async def get_hash(kill_id):
     url = f"https://zkillboard.com/api/killID/{kill_id}/"
-    return (await get(url))['zkb']['hash']
+    return (await get(url))[0]['zkb']['hash']
 
 
 async def get_kill(kill_id, kill_hash):
