@@ -138,12 +138,12 @@ async def get_abyssals_mutamarket(type_id: int):
 
 
 async def get_price_with_id(type_id):
-    return type_id, await get_item_price(type_id)
+    return await get_item_price(type_id), type_id
 
 
 async def get_cheapest(item_ids):
     items = await asyncio.gather(*[get_price_with_id(item_id) for item_id in item_ids])
-    return min(items, key=lambda item: item[1])
+    return min(items, key=lambda item: item[0])
 
 
 def module_combinations(repeatable_mods, unique_mods, count) -> list[list[DamageMod]]:
