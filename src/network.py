@@ -276,7 +276,13 @@ async def get_item_price_history(type_id, region_id=10000002):
 
 async def get_item_price(type_id):
     url = f"https://market.fuzzwork.co.uk/aggregates/?region=10000002&types={type_id}"
-    return float((await get(url))[str(type_id)]["sell"]["min"])
+    price = (await get(url)).get(str(type_id), {}).get("sell", {}).get("min", 0)
+    # If there are no items for sale then the api might return all 0 as integer
+    # This means no items available. We set the price to infinite.
+    if type(price) == int and price == 0:
+        return float("inf")
+
+    return float(price)
 
 
 @cached()
