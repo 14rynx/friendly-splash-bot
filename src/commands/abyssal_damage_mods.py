@@ -160,21 +160,29 @@ def module_combinations(repeatable_mods, unique_mods, count) -> list[list[Damage
                 yield [m] + y
 
 
-def filter_modules(modules: list[DamageMod]) -> list[DamageMod]:
+def should_remove_module(module: DamageMod, all_modules: list[DamageMod], max_price: float):
+    # Remove modules outside of max price
+    if module.price > max_price:
+        return True
+
+    for other_module in all_modules:
+
+        # Remove strictly worse modules
+        if (module.cpu > other_module.cpu and
+                module.rof > other_module.rof and
+                module.damage < other_module.damage and
+                module.price > other_module.price):
+            return True
+
+    return False
+
+
+def filter_modules(modules: list[DamageMod], max_price: float) -> list[DamageMod]:
     """filter out any modules that are strictly worse than some other modules"""
-    modules_to_remove = set()
 
-    for module in modules:
-        for other_module in modules:
-            if (module.cpu > other_module.cpu and
-                    module.rof > other_module.rof and
-                    module.damage < other_module.damage and
-                    module.price > other_module.price):
-                modules_to_remove.add(module)
-                break
+    modules_to_remove = [m for m in modules if should_remove_module(m, modules, max_price)]
 
-    # Remove modules
-    modules = list(set(modules) - modules_to_remove)
+    modules = list(set(modules) - set(modules_to_remove))
 
     return modules
 
@@ -262,10 +270,10 @@ async def send_best(ctx, args, unique_getter, repeatable_getter):
     unique_mods = await unique_getter()
 
     # Filter modules
-    unique_mods = filter_modules(unique_mods)
+    unique_mods = filter_modules(unique_mods, max_price)
 
     # Return early if there are to many combinations
-    if (len(unique_mods) + len(repeatable_mods)) ** slots > 80e9:
+    if (len(unique_mods) + len(repeatable_mods)) ** slots > 42e6:
         await ctx.send("There are to many combinations your requirements!\n "
                        "Consider reducing the price range or amount of slots.")
         return
