@@ -1,5 +1,7 @@
 import asyncio
 import math
+import functools
+import heapq
 
 from async_lru import alru_cache
 from discord.ext import commands
@@ -200,27 +202,34 @@ def best_sets(
     """return the best module sets based on all possible module sets, as well as their relative grading"""
     sorting_points = []
     usable_sets = []
+
     for combination in module_combinations(repeatable_mods, unique_mods, count):
 
         damage_mod_set = DamageModSet(combination)
-        if damage_mod_set.cpu < max_cpu:
-            sorting_points.append(
-                (
-                    float(damage_mod_set.price),
-                    float(damage_mod_set.get_damage_multiplier(**kwargs))
-                )
-            )
-            if min_price < damage_mod_set.price < max_price:
-                usable_sets.append(damage_mod_set)
+
+        if damage_mod_set.cpu >= max_cpu:
+            continue  # Skip invalid sets early
+
+        # Precompute expensive calculations
+        price = float(damage_mod_set.price)
+        damage_multiplier = float(damage_mod_set.get_damage_multiplier(**kwargs))
+
+        sorting_points.append((price, damage_multiplier))
+
+        if min_price < price < max_price:
+            usable_sets.append((damage_mod_set, price, damage_multiplier))
 
     sorter = RelationalSorter(sorting_points)
 
-    for x in sorted(
-            usable_sets,
-            key=lambda c: sorter((c.price, c.get_damage_multiplier(**kwargs))),
-            reverse=True
-    )[:results]:
-        yield x, sorter((x.price, x.get_damage_multiplier(**kwargs)))
+    # Use heapq.nlargest instead of sorting everything
+    best_sets = heapq.nlargest(
+        results,
+        usable_sets,
+        key=lambda c: sorter((c[1], c[2]))  # Using precomputed values
+    )
+
+    for damage_mod_set, price, damage_multiplier in best_sets:
+        yield damage_mod_set, sorter((price, damage_multiplier))
 
 
 async def send_best(ctx, args, unique_getter, repeatable_getter):
@@ -278,12 +287,19 @@ async def send_best(ctx, args, unique_getter, repeatable_getter):
                        "Consider reducing the price range or amount of slots.")
         return
 
+    # Find sets
+    loop = asyncio.get_running_loop()
+    sets = await loop.run_in_executor(
+        None, functools.partial(
+            best_sets,
+            unique_mods, repeatable_mods, slots, min_price, max_price, max_cpu, count,
+            uptime=uptime, rof_rig=rof_rig, damage_rig=damage_rig
+        )
+    )
+
     # Make printout
     has_set = False
-    for itemset, effectiveness in best_sets(
-            unique_mods, repeatable_mods, slots, min_price, max_price, max_cpu,
-            results=count, uptime=uptime, rof_rig=rof_rig, damage_rig=damage_rig
-    ):
+    for itemset, effectiveness in sets:
         has_set = True
         ret = await itemset.async_str(effectiveness)
         await ctx.send(ret)
