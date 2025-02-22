@@ -1,7 +1,8 @@
 import asyncio
-import math
 import functools
 import heapq
+import logging
+import math
 
 from async_lru import alru_cache
 from discord.ext import commands
@@ -9,6 +10,10 @@ from discord.ext import commands
 from network import get_item_price, get_item_name, get
 from utils import RelationalSorter, unix_style_arg_parser, command_error_handler, isk
 from utils import convert
+
+# Configure the logger
+logger = logging.getLogger('discord.abyssal_damage_mods')
+logger.setLevel(logging.INFO)
 
 
 class DamageMod:
@@ -282,7 +287,10 @@ async def send_best(ctx, args, unique_getter, repeatable_getter):
     unique_mods = filter_modules(unique_mods, max_price)
 
     # Return early if there are to many combinations
-    if (len(unique_mods) + len(repeatable_mods)) ** slots > 42e6:
+    # Return early if there are to many combinations
+    total_combinations = (len(unique_mods) + len(repeatable - mods)) ** slots
+    logger.info("Aproximate Combinations: {total_combinations}")
+    if total_combinations > 1e10:
         await ctx.send("There are to many combinations your requirements!\n "
                        "Consider reducing the price range or amount of slots.")
         return
