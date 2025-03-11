@@ -12,7 +12,7 @@ from utils import convert
 
 
 class DamageMod:
-    def __init__(self, cpu=100, damage=1.0, rof=1.0, price=1e50, type_id=None, module_id=None, contract_id=None,
+    def __init__(self, cpu, damage, rof, price, type_id=None, module_id=None, contract_id=None,
                  attributes=None):
         self.cpu = cpu
         self.damage = damage
