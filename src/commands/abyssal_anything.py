@@ -1,162 +1,238 @@
 import asyncio
+import heapq
 import itertools
 import logging
 
 from discord.ext import commands
 
-from network import get, get_dogma_attributes
+from network import get, get_dogma_attributes, get_item_name
 from utils import convert, command_error_handler, unix_style_arg_parser
 
 # Configure the logger
 logger = logging.getLogger('discord.utils')
 logger.setLevel(logging.INFO)
 
-stat_dictionary = {
-    "price": 0,
-    "hps": 420001,
-    "hpgj": 420002,
-    "gjs": 420003,
-    "cpu": 50,
-    "pg": 30,
-    "power": 30,
-    "powergrid": 30,
-    "cap": 6,
-    "speed": 20,
-    "power": 30,
-    "cpu": 50,
-    "sig": 554,
-    "signature": 554,
-    "duration": 73,
-    "em_resonance": 974,
-    "explosive_resonance": 975,
-    "kinetic_resonance": 976,
-    "thermal_resonance": 977,
-    "siegeMissileDamageBonus": 2306,
-    "siegeTurretDamageBonus": 2307,
-    "siegeLocalLogisticsDurationBonus": 2346,
-    "siegeLocalLogisticsAmountBonus": 2347,
-    "range": 54,
-    "rep": 84,
-    "reload": 1795,
-    "boost": 68,
-    "neut": 97,
-    "ct": 90,
-    "hp": 9,
-    "cap_reduction": 147,
-    "mass": 796,
-    "extra_armor": 1159,
-    "extra_cap": 67,
-    "neut_resist": 2267,
-    "extra_shield": 72,
-    "signatureRadiusAdd": 983,
-}
 
-module_dictionary = {
-    "10000mn": 56305,
-    "100mn": 47757,
-    "10mn": 47753,
-    "1mn": 47749,
-    "50000mn": 56306,
-    "500mn": 47745,
-    "50mn": 47408,
-    "5mn": 47740,
-    "adc": 52230,
-    "dcu": 52227,
-    "siege": 56313,
-    "web": 47702,
-    "point": 47736,
-    "scram": 47732,
-    "caar": 56308,
-    "casb": 56310,
-    "car": 56307,
-    "cneut": 56312,
-    "capital_neut": 56312,
-    "cnos": 56311,
-    "ccapital_nos": 56311,
-    "csb": 56309,
-    "hneut": 47832,
-    "heavy_neut": 47832,
-    "hnos": 48427,
-    "heavy_nos": 48427,
-    "hpoint": 56304,
-    "heavy_point": 56304,
-    "hscram": 56303,
-    "heavy_scram": 56303,
-    "laar": 47846,
-    "lasb": 47838,
-    "1600mm": 47820,
-    "lar": 47777,
-    "lbat": 48439,
-    "large_battery": 48439,
-    "lsb": 47789,
-    "lse": 47808,
-    "maar": 47844,
-    "masb": 47836,
-    "800mm": 47817,
-    "mar": 47773,
-    "mbat": 48435,
-    "medium_battery": 48435,
-    "mneut": 47828,
-    "medium_neut": 47828,
-    "mnos": 48423,
-    "medium_nos": 48423,
-    "msb": 47785,
-    "mse": 47804,
-    "saar": 47842,
-    "400mm": 47812,
-    "sar": 47769,
-    "sbat": 48431,
-    "small_battery": 48431,
-    "sneut": 47824,
-    "small_neut": 47824,
-    "snos": 48419,
-    "small_nos": 48419,
-    "ssb": 47781,
-    "sse": 47800,
-    "xlasb": 47840,
-    "xlsb": 47793
-}
+class Entity:
+    def __init__(self, some_id, full_name, abbreviation, *other_names):
+        self.some_id = some_id
+        self.full_name = full_name
+        self.abbreviation = abbreviation
+
+        if type(other_names) is str:
+            self.other_names = [other_names]
+        else:
+            self.other_names = list(other_names)
+
+        if "Abyssal" in full_name:
+            self.other_names.append(full_name.replace("Abyssal", "").replace("  ", " "))
+
+    def names(self):
+        return self.full_name, self.abbreviation
+
+
+class EntityRegistry:
+    def __init__(self):
+        self.id_to_entity = {}  # Maps ID -> Module
+        self.name_to_id = {}  # Maps any name variant -> ID
+
+    def add(self, entity):
+        """Adds a new module and updates the lookup tables."""
+        self.id_to_entity[entity.some_id] = entity
+
+        # Map all names to this module's ID
+        for name in entity.names():
+            self.name_to_id[name.lower()] = entity.some_id
+
+    def get_id(self, name):
+        if (nl := name.lower()) in self.name_to_id:
+            return self.name_to_id[nl]
+        else:
+            return int(name)
+
+    def get_entity(self, name):
+        return self.id_to_entity[self.get_id(name)]
+
+    def get_name(self, some_id: int):
+        if some_id in self.id_to_entity:
+            return self.id_to_entity[some_id].full_name
+        else:
+            return f"Id: {some_id}"
+
+
+module_registry = EntityRegistry()
+module_registry.add(Entity(56305, "10000mn Abyssal Afterburner", "10000mn"))
+module_registry.add(Entity(47757, "100mn Abyssal Afterburner", "100mn"))
+module_registry.add(Entity(47753, "10mn Abyssal Afterburner", "10mn"))
+module_registry.add(Entity(47749, "1mn Abyssal Afterburner", "1mn"))
+module_registry.add(Entity(56306, "50000mn Abyssal Microwarpdrive", "50000mn"))
+module_registry.add(Entity(47745, "500mn Abyssal Microwarpdrive", "500mn"))
+module_registry.add(Entity(47408, "50mn Abyssal Microwarpdrive", "50mn"))
+module_registry.add(Entity(47740, "5mn Abyssal Microwarpdrive", "5mn"))
+module_registry.add(Entity(52230, "Abyssal Assault Damage Control", "adc"))
+module_registry.add(Entity(52227, "Abyssal Damage Control", "dcu"))
+module_registry.add(Entity(56313, "Abyssal Siege Module", "siege"))
+module_registry.add(Entity(47702, "Abyssal Stasis Webifier", "web"))
+module_registry.add(Entity(47736, "Abyssal Warp Disruptor", "point", "disruptor"))
+module_registry.add(Entity(47732, "Warp Scrambler", "scram"))
+module_registry.add(Entity(56308, "Capital Abyssal Ancillary Armor Repairer", "caar"))
+module_registry.add(Entity(56310, "Capital Abyssal Ancillary Shield Booster", "casb"))
+module_registry.add(Entity(56307, "Capital Abyssal Armor Repairer", "car"))
+module_registry.add(Entity(56312, "Capital Abyssal Energy Neutralizer", "cneut"))
+module_registry.add(Entity(56311, "Capital Abyssal Nosferatu", "cnos"))
+module_registry.add(Entity(56309, "Capital Abyssal Shield Booster", "csb"))
+module_registry.add(Entity(47832, "Heavy Abyssal Energy Neutralizer", "hneut"))
+module_registry.add(Entity(48427, "Heavy Abyssal Nosferatu", "hnos"))
+module_registry.add(Entity(56304, "Heavy Abyssal Warp Disruptor", "hpoint"))
+module_registry.add(Entity(56303, "Heavy Abyssal Warp Scrambler", "hscram"))
+module_registry.add(Entity(47846, "Large Abyssal Ancillary Armor Repairer", "laar"))
+module_registry.add(Entity(47838, "Large Abyssal Ancillary Shield Booster", "lasb"))
+module_registry.add(Entity(47820, "Large Abyssal Armor Plates", "1600mm", "1600mm"))
+module_registry.add(Entity(47777, "Large Abyssal Armor Repairer", "LAR", "lar"))
+module_registry.add(Entity(48439, "Large Abyssal Cap Battery", "lbat"))
+module_registry.add(Entity(47789, "Large Abyssal Shield Booster", "LSB", "lsb"))
+module_registry.add(Entity(47808, "Large Abyssal Shield Extender", "LSE", "lse"))
+module_registry.add(Entity(47844, "Medium Abyssal Ancillary Armor Repairer", "maar"))
+module_registry.add(Entity(47836, "Medium Abyssal Ancillary Shield Booster", "masb"))
+module_registry.add(Entity(47817, "Medium Abyssal Armor Plates", "800mm"))
+module_registry.add(Entity(47773, "Medium Abyssal Armor Repairer", "mar"))
+module_registry.add(Entity(48435, "Medium Abyssal Cap Battery", "mbat"))
+module_registry.add(Entity(47828, "Medium Abyssal Energy Neutralizer", "mneut"))
+module_registry.add(Entity(48423, "Medium Abyssal Nosferatu", "mnos"))
+module_registry.add(Entity(47785, "Medium Abyssal Shield Booster", "msb"))
+module_registry.add(Entity(47804, "Medium Abyssal Shield Extender", "mse"))
+module_registry.add(Entity(47842, "Small Abyssal Ancillary Armor Repairer", "saar"))
+module_registry.add(Entity(47812, "Small Abyssal Armor Plate", "400mm"))
+module_registry.add(Entity(47769, "Small Abyssal Armor Repairer", "sar"))
+module_registry.add(Entity(48431, "Small AbyssalBattery", "sbat"))
+module_registry.add(Entity(47824, "Small Abyssal Energy Neutralizer", "sneut"))
+module_registry.add(Entity(48419, "Small AbyssalNosferatu", "snos"))
+module_registry.add(Entity(47781, "Small Abyssal Shield Booster", "ssb"))
+module_registry.add(Entity(47800, "Small Abyssal Shield Extender", "sse"))
+module_registry.add(Entity(47840, "X-Large Abyssal Ancillary Shield Booster", "xlasb"))
+module_registry.add(Entity(47793, "X-Large Abyssal Shield Booster", "xlsb"))
+
+stat_registry = EntityRegistry()
+stat_registry.add(Entity(0, "Price", "price"))
+stat_registry.add(Entity(50, "CPU Usage", "cpu"))
+stat_registry.add(Entity(30, "Powergrid Usage", "pg", "power", "powergrid"))
+stat_registry.add(Entity(6, "Capacitor Usage", "cap", "capacitor"))
+stat_registry.add(Entity(20, "Speed Boost", "speed"))
+stat_registry.add(Entity(554, "Signature Radius Multiplier", "sig", "signature", "sig_multiplier", "sig_mult"))
+stat_registry.add(Entity(73, "Duration", "duration"))
+stat_registry.add(Entity(974, "Hull EM Resonance", "em_resonance"))
+stat_registry.add(Entity(975, "Hull Explosive Resonance", "explosive_resonance"))
+stat_registry.add(Entity(976, "Hull Kinetic Resonance", "kinetic_resonance"))
+stat_registry.add(Entity(977, "Hull Thermal Resonance", "thermal_resonance"))
+stat_registry.add(Entity(2306, "Siege Damage (Missiles)", "siege_damage_missile"))
+stat_registry.add(Entity(2307, "Siege Damage (Turrets)", "siege_damage_turret"))
+stat_registry.add(Entity(2346, "Siege Logistics Duration", "siege_logistics_duration"))
+stat_registry.add(Entity(2347, "Siege Logistics Amount", "siege_logistics_amount"))
+stat_registry.add(Entity(54, "Range", "range"))
+stat_registry.add(Entity(84, "Repair Amount", "rep"))
+stat_registry.add(Entity(1795, "Reload Time", "reload"))
+stat_registry.add(Entity(68, "Shield Boost Amount", "shield_boost"))
+stat_registry.add(Entity(97, "Energy Neutralizer Amount", "neut_amount"))
+stat_registry.add(Entity(97, "Energy Nosferatu Amount", "nos_amount"))
+stat_registry.add(Entity(90, "Cap Transfer Amount", "cap_amount"))
+stat_registry.add(Entity(9, "Hitpoints", "hp"))
+stat_registry.add(Entity(147, "Capacitor Reduction", "cap_reduction"))
+stat_registry.add(Entity(796, "Mass Increase", "mass", "mass_increase"))
+stat_registry.add(Entity(1159, "Additional Armor", "extra_armor"))
+stat_registry.add(Entity(67, "Additional Capacitor", "extra_cap"))
+stat_registry.add(Entity(2267, "Energy Neutralizer Resistance", "neut_resist"))
+stat_registry.add(Entity(72, "Additional Shield", "extra_shield"))
+stat_registry.add(Entity(983, "Signature Radius Addition", "sig_add"))
+stat_registry.add(Entity(420001, "HP per Second", "hp/s"))
+stat_registry.add(Entity(420002, "HP per GJ", "hp/gj"))
+stat_registry.add(Entity(420003, "GJ per Second", "gj/s"))
 
 
 class Module:
     def __init__(self, json):
-        self.type_id = json['type_id']
-        self.item_id = json["id"]
-        self.mutator_type_id = json['mutator_type_id']
-        self.source_type_id = json['source_type_id']
-        self.contract_id = json['latest_contract_id']
+        self.type_id = json.get("type", {}).get("id")
+        self.module_id = json.get("id")
+        self.mutator_type_id = json.get("mutaplasmid", {}).get("id")
+        self.source_type_id = json.get("source_type", {}).get("id")
+        self.contract_id = json.get("contract", {}).get("id")
+        self.type_name = None
+        self.unique = True  # Hardcoded for now
 
         # Make dictionary with attributes
         self.mutated_attributes = {}
-        for attribute in json.get("attributes"):
-            self.mutated_attributes[attribute["attribute_id"]] = float(attribute["value"])
+        for attribute in json.get("mutated_attributes"):
+            self.mutated_attributes[attribute.get("id")] = float(attribute.get("value"))
 
         self.basic_attributes = {}
 
-        # Calculate shield booster stats
+        # Add price stat
+        valid = True
+        if not (contract := json.get("contract")):
+            valid = False
+
+        if not contract.get("type") == "item_exchange":
+            valid = False
+
+        if not contract.get("region_id", 10000002) == 10000002:
+            valid = False
+
+        if not contract.get("plex_count", 0) == 0:
+            valid = False
+
+        if contract.get("asking_for_items", True):
+            valid = False
+
+        if valid:
+            self.mutated_attributes[0] = json.get("contract", {}).get("price")
+        else:
+            self.mutated_attributes[0] = float("inf")
+
+    def calculate_attributes(self, skill=5):
+        attrs = self.basic_attributes
+        attrs.update(self.mutated_attributes)
+
+        # Calculate skill bonuses (assume all V)
+        # https://wiki.eveuniversity.org/Fitting_skills#Advanced_Weapon_Upgrades
+        for type_name in ["sse", "mse", "lse"]:
+            if self.type_id == module_registry.get_id(type_name):
+                attrs[stat_registry.get_id("pg")] *= 1 - 0.05 * skill
+
+        for type_name in ["sbat", "mbat", "lbat"]:
+            if self.type_id == module_registry.get_id(type_name):
+                attrs[stat_registry.get_id("cpu")] *= 1 - 0.05 * skill
+
+        # Add calculated Attributes
         try:
-            self.mutated_attributes[420001] = self.mutated_attributes[68] / self.mutated_attributes[73] * 1000
-            self.mutated_attributes[420002] = self.mutated_attributes[68] / self.mutated_attributes[6]
-            self.mutated_attributes[420003] = self.mutated_attributes[6] / self.mutated_attributes[73] * 1000
+            attrs[stat_registry.get_id("hp/s")] = attrs[stat_registry.get_id("shield_boost")] / attrs[
+                stat_registry.get_id("duration")] * 1000
         except KeyError:
             pass
 
-        # Add price stat
-        self.mutated_attributes[0] = json.get("contract").get("unified_price")
+        try:
+            attrs[stat_registry.get_id("hp/gj")] = attrs[stat_registry.get_id("shield_boost")] / attrs[
+                stat_registry.get_id("cap")]
+        except KeyError:
+            pass
 
-    @property
-    def attributes(self):
-        attrs = self.basic_attributes
-        attrs.update(self.mutated_attributes)
+        try:
+            attrs[stat_registry.get_id("gj/s")] = attrs[stat_registry.get_id("cap")] / attrs[
+                stat_registry.get_id("duration")] * 1000
+        except KeyError:
+            pass
+
         return attrs
 
-    async def fetch(self):
-        for attribute in await get_dogma_attributes(self.source_type_id):
-            if attribute["attribute_id"] not in self.basic_attributes:
-                self.basic_attributes[attribute["attribute_id"]] = float(attribute["value"])
+    def __str__(self):
+        if self.type_name is None:
+            ret = f"Abyssal Type {self.type_id}\n"
+        else:
+            ret = self.type_name
 
-    def url(self, number=1):
-        return f"[Abyssal Module {number}](https://mutamarket.com/modules/{self.item_id})"
+        if self.unique:
+            ret += "\n"
+            ret += f"- [Mutamarket](https://mutamarket.com/modules/{self.module_id})\n"
+            ret += f"- Contract: `<url=contract:30000142//{self.contract_id}>Contract {self.contract_id}</url>`"
+        return ret
 
 
 async def get_abyssals(type_id: int):
@@ -164,8 +240,26 @@ async def get_abyssals(type_id: int):
     item_data = await get(url)
 
     modules = [Module(json=j) for j in item_data]
-    tasks = [m.fetch() for m in modules]
-    await asyncio.gather(*tasks)
+
+    # Collect unique type_ids
+    attribute_type_ids = {m.source_type_id for m in modules}
+    name_type_ids = {m.type_id for m in modules}
+
+    # Fetch all attributes and names in parallel
+    attribute_data = await asyncio.gather(*(get_dogma_attributes(tid) for tid in attribute_type_ids))
+    name_data = await asyncio.gather(*(get_item_name(tid) for tid in name_type_ids))
+
+    # Map results
+    attribute_map = dict(zip(attribute_type_ids, attribute_data))
+    name_map = dict(zip(name_type_ids, name_data))
+
+    # Distribute fetched data to modules
+    for module in modules:
+        attributes = attribute_map.get(module.source_type_id, [])
+        for attribute_id, value in attributes.items():
+            module.basic_attributes[attribute_id] = value
+
+        module.type_name = name_map.get(module.type_id)
 
     return modules
 
@@ -174,35 +268,15 @@ def combine_stats(combination):
     # Calculate combination stats
     stats = {}
     for module in combination:
-        for aid, stat in module.attributes.items():
+        for aid, stat in module.calculate_attributes().items():
             stats[aid] = stats.get(aid, 0) + stat
 
     return stats
 
 
-def parse_module(module_string):
-    if module_string.lower() in module_dictionary:
-        return module_dictionary[module_string.lower()]
-    else:
-        return int(module_string)
-
-
-def parse_stat(stat_string):
-    if stat_string.lower() in stat_dictionary:
-        return stat_dictionary[stat_string.lower()]
-    else:
-        return int(stat_string)
-
-
-@commands.command()
-@command_error_handler
-async def multi(ctx, *args):
-    """"""
-    # Parse arguments
-    arguments = unix_style_arg_parser(args)
-
+def parse_arguments(arguments):
     # Parse modules to use
-    module_ids = [parse_module(m) for m in arguments[""]]
+    module_ids = [module_registry.get_id(m) for m in arguments[""]]
     del arguments[""]
 
     # Parse sorting / filtering to use
@@ -213,7 +287,7 @@ async def multi(ctx, *args):
 
     for stat, values in arguments.items():
         # Parse stat_id
-        stat_id = parse_stat(stat)
+        stat_id = stat_registry.get_id(stat)
         last = stat_id
 
         state = "keyword"
@@ -232,18 +306,12 @@ async def multi(ctx, *args):
                 continue
 
             if state == "value_max":
-                if stat_id in stats_max:
-                    stats_max[last].append(convert(value))
-                else:
-                    stats_max[last] = [convert(value)]
+                stats_max[last] = convert(value)
                 state = "keyword"
                 continue
 
             elif state == "value_min":
-                if last in stats_min:
-                    stats_min[last].append(convert(value))
-                else:
-                    stats_min[last] = [convert(value)]
+                stats_min[last] = convert(value)
                 state = "keyword"
                 continue
 
@@ -253,101 +321,157 @@ async def multi(ctx, *args):
                 continue
 
             elif state == "only":
-                last = (stat_id, parse_module(value))
+                last = (int(stat_id), module_registry.get_id(value))
                 state = "keyword"
                 continue
 
-    logger.info(f"Filter\n - Min: {stats_min}\n - Max: {stats_max}\n - Sort by {sort_by}")
-    # Fetch modules
-    tasks = [get_abyssals(type_id) for type_id in module_ids]
-    modules = await asyncio.gather(*tasks)
+    return module_ids, stats_min, stats_max, sort_by, largest_first
 
-    logger.info("All Modules:" + " ".join([str(len(m)) for m in modules]))
 
-    # Check if individual modules satisfy requirements
-    usable_modules = []
-    for module_group in modules:
-        group_usable_modules = []
-        for module in module_group:
-            usable = True
-            for requirement, values in stats_min.items():
-                for value in values:
-                    if type(requirement) is tuple:
-                        stat_id, module_id = requirement
-                        if module.type_id == module_id and module.attributes[stat_id] < value:
-                            usable = False
+def filter_individual_modules(modules, stats_max):
+    for module in modules:
+        attributes = module.calculate_attributes()
 
-            for requirement, values in stats_max.items():
-                for value in values:
-                    if type(requirement) is tuple:
-                        stat_id, module_id = requirement
-                        if module.type_id == module_id and module.attributes[stat_id] > value:
-                            usable = False
+        usable = True
+        for requirement, value in stats_max.items():
+            if type(requirement) is tuple:
+                stat_id, module_id = requirement
+                if module.type_id == module_id and stat_id in attributes and attributes[stat_id] > value:
+                    usable = False
 
-            if usable:
-                group_usable_modules.append(module)
+            elif type(requirement) is int:
+                stat_id = requirement
+                if stat_id in attributes and attributes[stat_id] > value:
+                    usable = False
 
-        usable_modules.append(group_usable_modules)
+        if usable:
+            yield module
 
-    logger.info("Usable Modules:" + " ".join([str(len(m)) for m in usable_modules]))
 
-    usable_combinations = []
-    # Filter combinations by stats
-    for combination in itertools.product(*usable_modules):
+def filter_module_sets(module_groups, stats_min, stats_max):
+    for combination in itertools.product(*module_groups):
 
         usable = True
 
         stats = combine_stats(combination)
 
-        # Check if combination satisfies requirements
-        for requirement, values in stats_min.items():
-            for value in values:
-                if type(requirement) is int:
-                    stat_id = requirement
-                    if stat_id in stats:
-                        if stats[stat_id] < value:
-                            usable = False
+        for requirement, value in stats_min.items():
+            if type(requirement) is int:
+                stat_id = requirement
+                if stat_id in stats:
+                    if stats[stat_id] < value:
+                        usable = False
 
-        for requirement, values in stats_max.items():
-            for value in values:
-                if type(requirement) is int:
-                    stat_id = requirement
-                    if stat_id in stats:
-                        if stats[stat_id] > value:
-                            usable = False
+        for requirement, value in stats_max.items():
+            if type(requirement) is int:
+                stat_id = requirement
+                if stat_id in stats:
+                    if stats[stat_id] > value:
+                        usable = False
 
         if usable:
-            usable_combinations.append(combination)
+            yield combination
 
-    logger.info(f"Usable combinations: {len(usable_combinations)}")
+
+def stats_to_str(stats, sign="="):
+    ret = ""
+    for requirement, value in stats.items():
+        if type(requirement) is tuple:
+            stat_id, type_id = requirement
+            ret += f"- {stat_registry.get_name(stat_id)} {sign} {value} for Abyssal {type_id}\n"
+        elif type(requirement) is int:
+            stat_id = requirement
+            ret += f"- {stat_registry.get_name(stat_id)} {sign} {value}\n"
+
+    return ret
+
+
+@commands.command()
+@command_error_handler
+async def multi(ctx, *args):
+    """Searches for a set of multiple different abyssals with combined requirements.
+    Usage:
+        !multi <list of modules>
+        <list of requirement arguments>
+
+        - Modules can be passed by module ID or by abbreviations
+        - Requirements have the following format:
+            --<stat> [min|max] <value>
+            --<stat> sort [asc|desc]
+            --<stat> only <module> [min|max] <value>
+            or any combination thereof
+    """
+
+    # Parse arguments
+    try:
+        arguments = unix_style_arg_parser(args)
+        module_ids, stats_min, stats_max, sort_by, largest_first = parse_arguments(arguments)
+    except Exception:
+        await ctx.send("Could not parse arguments!")
+        return
+    else:
+        await ctx.send(
+            f"Finding combinations for\n"
+            f"Min:\n{stats_to_str(stats_min, '>')}"
+            f"Max:\n{stats_to_str(stats_max, '<')}"
+            f"Sort by {stat_registry.get_name(sort_by)}"
+        )
+
+    # Fetch modules
+    tasks = [get_abyssals(type_id) for type_id in module_ids]
+    module_groups = await asyncio.gather(*tasks)
+
+    # Prefilter each module group to satisfy requirements individually
+    usable_module_groups = []
+    for m in module_groups:
+        usable_module_groups.append(filter_individual_modules(m, stats_max))
+
+    # Filter for combined requirements
+    combinations = filter_module_sets(usable_module_groups, stats_min, stats_max)
 
     # Build sorting functions
-    def sort(combination):
-        if type(sort_by) is int:
-            stat_id = sort_by
-            return combine_stats(combination)[stat_id]
-        elif type(sort_by) is tuple:
-            stat_id, module_id = sort_by
+    if type(sort_by) is int:
+        stat_id = sort_by
+
+        def sort_function(combination):
+            stat_value = combine_stats(combination)[stat_id]
+            return stat_value if largest_first else -stat_value
+
+    elif type(sort_by) is tuple:
+        stat_id, module_id = sort_by
+
+        def sort_function(combination):
             for module in combination:
                 if module.type_id == module_id:
-                    return module.attributes[stat_id]
+                    stat_value = module.calculate_attributes().get(stat_id, 0)
+                    return stat_value if largest_first else -stat_value
+                return 0
 
     # Make output
-    for combination in sorted(usable_combinations, key=sort, reverse=largest_first)[:2]:
-        urls = " ".join([m.url(i) for i, m in enumerate(combination)])
+    best_sets = heapq.nlargest(
+        3,
+        combinations,
+        key=sort_function,
+    )
 
-        # Name stats for output (unused)
-        """async with aiohttp.ClientSession() as session:
-            async with session.get("https://sde.hoboleaks.space/tq/dogmaattributes.json") as response:
-                standard_dictionary = await response.json()
+    # Make printout
+    # Find printable stats
+    printable_keys = {stat for stat in list(stats_min.keys()) + list(stats_max.keys()) if type(stat) is int} | {sort_by}
 
-        stats = combine_stats(combination)"""
-        logger.info(
-            f"Result Modules {' '.join(['(' + str(m.type_id) + ' ' + str(m.mutator_type_id) + ')' for m in combination])}\n ")
+    has_set = False
+    for combination in best_sets:
+        has_set = True
+        module_body = "\n".join(map(str, combination))
 
-        await ctx.send(f"## Modules\n{urls}\n")
-    if len(usable_combinations) == 0:
-        await ctx.send("Could not find any combinations that satisfy those requirements!")
+        printable_stats = {k: v for k, v in combine_stats(combination).items() if k in printable_keys}
+        stats_body = stats_to_str(printable_stats)
+
+        await ctx.send(
+            f"## Modules\n{module_body}\nStats:\n{stats_body}"
+        )
+
+    if not has_set:
+        await ctx.send("No combinations found for these requirements!")
 
 
 async def setup(bot):

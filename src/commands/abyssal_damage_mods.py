@@ -2,51 +2,68 @@ import asyncio
 import functools
 import heapq
 import math
+from typing import Any, Generator
 
 from async_lru import alru_cache
 from discord.ext import commands
 
-from network import get_item_price, get_item_name, get
+from network import get_item_price, get
 from utils import RelationalSorter, unix_style_arg_parser, command_error_handler, isk
 from utils import convert
 
 
 class DamageMod:
-    def __init__(self, cpu, damage, rof, price, type_id=None, module_id=None, contract_id=None,
-                 attributes=None):
+    def __init__(self, type_id, type_name, **kwargs):
+        self.type_id = type_id
+        self.type_name = type_name
+
+        self.cpu = None
+        self.damage = None
+        self.rof = None
+
+        if kwargs:
+            self.add_stats(**kwargs)
+
+        self.price = None
+
+        self.unique = False
+        self.module_id = None
+        self.contract_id = None
+
+    def add_stats(self, cpu=None, damage=None, rof=None):
         self.cpu = cpu
         self.damage = damage
         self.rof = rof
-        self.price = price
 
-        self.type_id = type_id
+    def add_stats_from_attributes(self, attributes=None):
+        for attribute_id, value in attributes.items():
+            match attribute_id:
+                case 50:
+                    self.cpu = value
+                case 64 | 213:
+                    self.damage = value
+                case 204:
+                    self.rof = value
+                case _:
+                    pass
+        return self
+
+    def add_unique_instance(self, module_id, contract_id):
+        self.unique = True
         self.module_id = module_id
         self.contract_id = contract_id
 
-        if attributes is not None:
-            self.from_attributes(attributes)
-
-    def from_attributes(self, attributes):
-        for attribute_id, value in attributes.items():
-            if attribute_id == 50:
-                self.cpu = value
-            if attribute_id == 64:
-                self.damage = value
-            if attribute_id == 213:
-                self.damage = value
-            if attribute_id == 204:
-                self.rof = value
-        return self
+    async def fetch_price(self):
+        if not self.unique:
+            self.price = await get_item_price(self.type_id)
 
     def __str__(self):
-        return asyncio.run(self.async_str())
-
-    async def async_str(self, number=1):
-        if self.module_id is None:
-            return await get_item_name(self.type_id)
-        else:
-            return (f"[Abyssal Module {number}](https://mutamarket.com/modules/{self.module_id}) "
-                    f"Contract: <url=contract:30000142//{self.contract_id}>Contract {self.contract_id}</url>")
+        ret = self.type_name
+        if self.unique:
+            ret += "\n"
+            ret += f"- [Mutamarket](https://mutamarket.com/modules/{self.module_id})\n"
+            ret += f"- Contract: `<url=contract:30000142//{self.contract_id}>Contract {self.contract_id}</url>`"
+        return ret
 
 
 class DamageModSet:
@@ -100,18 +117,18 @@ class DamageModSet:
         return sum([x.price for x in self.damage_mods])
 
     def __str__(self):
-        return asyncio.run(self.async_str())
-
-    async def async_str(self, efficiency=None):
-        out = f"**CPU: {self.cpu:.2f} Damage: {self.damage_multiplier:.3f} Price: {isk(self.price)}" + \
-              ("**" if efficiency is None else f" (Efficiency: {efficiency})**\n")
-        out += "\n".join([await x.async_str(i + 1) for i, x in enumerate(self.damage_mods)])
+        out = f"CPU: {self.cpu:.2f} Damage: {self.damage_multiplier:.3f} Price: {isk(self.price)}\n"
+        out += "\n".join(map(str, self.damage_mods))
         return out
 
 
-async def get_abyssals_mutamarket(type_id: int):
+@alru_cache(ttl=60)
+async def get_abyssals_mutamarket(type_id: int, type_name: str):
+    """Fetch all abyssals from a certain type from the mutamarket API"""
     url = f"https://mutamarket.com/api/modules/type/{type_id}/item-exchange/contracts-only/"
     item_data = await get(url)
+
+    modules = []
     for item in item_data:
         if not (contract := item.get("contract")):
             continue
@@ -130,25 +147,28 @@ async def get_abyssals_mutamarket(type_id: int):
 
         attributes = {a.get("id"): a.get("value") for a in item.get("mutated_attributes", [])}
 
-        yield DamageMod(
-            price=contract.get("price"),
+        module = DamageMod(
             type_id=item.get("mutator_type_id"),
-            module_id=item.get("id"),
-            contract_id=contract.get("id"),
-            attributes=attributes,
+            type_name=type_name
         )
 
+        module.add_stats_from_attributes(attributes)
+        module.price = contract.get("price")
 
-async def get_price_with_id(type_id):
-    return await get_item_price(type_id), type_id
+        module.add_unique_instance(
+            module_id=item.get("id"),
+            contract_id=contract.get("id")
+        )
+
+        modules.append(module)
+    return modules
 
 
-async def get_cheapest(item_ids):
-    items = await asyncio.gather(*[get_price_with_id(item_id) for item_id in item_ids])
-    return min(items, key=lambda item: item[0])
+async def fetch_module_prices(modules):
+    await asyncio.gather(*[m.fetch_price() for m in modules])
 
 
-def module_combinations(repeatable_mods, unique_mods, count) -> list[list[DamageMod]]:
+def module_combinations(repeatable_mods, unique_mods, count) -> Generator[list[Any] | list[DamageMod], Any, None]:
     if count == 1:
         for m in repeatable_mods + unique_mods:
             yield [m]
@@ -162,7 +182,8 @@ def module_combinations(repeatable_mods, unique_mods, count) -> list[list[Damage
                 yield [m] + y
 
 
-def should_remove_module(module: DamageMod, all_modules: list[DamageMod], max_price: float):
+def should_filter_module(module: DamageMod, all_modules: list[DamageMod], max_price: float):
+    """Helper function for filter_modules"""
     # Remove modules outside of max price
     if module.price > max_price:
         return True
@@ -170,9 +191,9 @@ def should_remove_module(module: DamageMod, all_modules: list[DamageMod], max_pr
     for other_module in all_modules:
 
         # Remove strictly worse modules
-        if (module.cpu > other_module.cpu and
-                module.rof > other_module.rof and
-                module.damage < other_module.damage and
+        if (module.cpu >= other_module.cpu and
+                module.rof >= other_module.rof and
+                module.damage <= other_module.damage and
                 module.price > other_module.price):
             return True
 
@@ -182,7 +203,7 @@ def should_remove_module(module: DamageMod, all_modules: list[DamageMod], max_pr
 def filter_modules(modules: list[DamageMod], max_price: float) -> list[DamageMod]:
     """filter out any modules that are strictly worse than some other modules"""
 
-    modules_to_remove = [m for m in modules if should_remove_module(m, modules, max_price)]
+    modules_to_remove = [m for m in modules if should_filter_module(m, modules, max_price)]
 
     modules = list(set(modules) - set(modules_to_remove))
 
@@ -198,7 +219,7 @@ def best_sets(
         max_cpu,
         results=5,
         **kwargs
-) -> list[tuple[DamageModSet, float]]:
+) -> Generator[tuple[DamageModSet, Any], Any, None]:
     """return the best module sets based on all possible module sets, as well as their relative grading"""
     sorting_points = []
     usable_sets = []
@@ -232,7 +253,7 @@ def best_sets(
         yield damage_mod_set, sorter((price, damage_multiplier))
 
 
-async def send_best(ctx, args, unique_getter, repeatable_getter):
+async def send_best(ctx, args, unique_mods, repeatable_mods):
     # Parse arguments
     arguments = unix_style_arg_parser(args)
 
@@ -274,14 +295,10 @@ async def send_best(ctx, args, unique_getter, repeatable_getter):
     else:
         damage_rig = ""
 
-    # Fetch modules
-    repeatable_mods = await repeatable_getter()
-    unique_mods = await unique_getter()
-
     # Filter modules
     unique_mods = filter_modules(unique_mods, max_price)
+    repeatable_mods = filter_modules(repeatable_mods, max_price)
 
-    # Return early if there are to many combinations
     # Return early if there are to many combinations
     total_combinations = (len(unique_mods) + len(repeatable_mods)) ** slots
 
@@ -304,99 +321,12 @@ async def send_best(ctx, args, unique_getter, repeatable_getter):
 
     # Make printout
     has_set = False
-    for itemset, effectiveness in sets:
+    for item_set, efficiency in sets:
         has_set = True
-        ret = await itemset.async_str(effectiveness)
-        await ctx.send(ret)
+        await ctx.send(f"Efficiency: {efficiency}\n {item_set}")
 
     if not has_set:
         await ctx.send("No combinations found for these requirements!")
-
-
-@alru_cache(ttl=300)
-async def ballistics_unique():
-    return [x async for x in get_abyssals_mutamarket(49738)]
-
-
-@alru_cache(ttl=300)
-async def entropics_unique():
-    return [x async for x in get_abyssals_mutamarket(49734)]
-
-
-@alru_cache(ttl=300)
-async def gyros_unique():
-    return [x async for x in get_abyssals_mutamarket(49730)]
-
-
-@alru_cache(ttl=300)
-async def heatsinks_unique():
-    return [x async for x in get_abyssals_mutamarket(49726)]
-
-
-@alru_cache(ttl=300)
-async def magstabs_unique():
-    return [x async for x in get_abyssals_mutamarket(49722)]
-
-
-@alru_cache(ttl=1800)
-async def ballistics_repeatable():
-    return [
-        DamageMod(22, 1.10, 0.9, *(await get_cheapest([21484]))),  # Full Duplex
-        DamageMod(35, 1.07, 0.92, *(await get_cheapest([12274]))),  # T1
-        DamageMod(31, 1.08, 0.90, *(await get_cheapest([16457]))),  # Compact
-        DamageMod(40, 1.1, 0.90, *(await get_cheapest([22291]))),  # T2
-        DamageMod(38, 1.1, 0.90, *(await get_cheapest([46270]))),  # Kaatara's
-        DamageMod(24, 1.12, 0.89, *(await get_cheapest([15681, 13935, 13937, 28563, 15683]))),  # Faction
-    ]
-
-
-@alru_cache(ttl=1800)
-async def entropics_repeatable():
-    return [
-        DamageMod(27, 1.09, 0.96, *(await get_cheapest([47908]))),  # T1
-        DamageMod(25, 1.10, 0.95, *(await get_cheapest([47909]))),  # Compact
-        DamageMod(30, 1.13, 0.94, *(await get_cheapest([47911]))),  # T2
-        DamageMod(23, 1.14, 0.93, *(await get_cheapest([52244]))),  # Faction
-    ]
-
-
-@alru_cache(ttl=1800)
-async def gyros_repeatable():
-    return [
-        DamageMod(16, 1.07, 0.93, *(await get_cheapest([518]))),  # Basic
-        DamageMod(30, 1.10, 0.90, *(await get_cheapest([519]))),  # T2
-        DamageMod(27, 1.07, 0.92, *(await get_cheapest([520]))),  # T1
-        DamageMod(18, 1.1, 0.90, *(await get_cheapest([21486]))),  # Kindred
-        DamageMod(25, 1.08, 0.90, *(await get_cheapest([5933]))),  # Compact
-        DamageMod(20, 1.12, 0.89, *(await get_cheapest([13939, 15806]))),  # Faction
-    ]
-
-
-@alru_cache(ttl=1800)
-async def heatsinks_repeatable():
-    return [
-        DamageMod(35, 1.07, 0.92, *(await get_cheapest([2363]))),  # T1
-        DamageMod(25, 1.08, 0.90, *(await get_cheapest([5849]))),  # Compact
-        DamageMod(30, 1.1, 0.90, *(await get_cheapest([2364]))),  # T2
-        DamageMod(16, 1.07, 0.93, *(await get_cheapest([1893]))),  # Basic
-        DamageMod(18, 1.1, 0.9, *(await get_cheapest([23902]))),  # Trebuchet
-        DamageMod(29, 1.1, 0.9, *(await get_cheapest([23902]))),  # Tahron's
-        DamageMod(20, 1.12, 0.89, *(await get_cheapest([15810, 13943, 15808]))),  # Faction
-    ]
-
-
-@alru_cache(ttl=1800)
-async def magstabs_repeatable():
-    return [
-        DamageMod(35, 1.07, 0.92, *(await get_cheapest([9944]))),  # T1
-        DamageMod(25, 1.08, 0.90, *(await get_cheapest([5849]))),  # Compact
-        DamageMod(30, 1.1, 0.90, *(await get_cheapest([10190]))),  # T2
-        DamageMod(16, 1.07, 0.93, *(await get_cheapest([10188]))),  # Basic
-        DamageMod(18, 1.1, 0.9, *(await get_cheapest([22919]))),  # Monopoly
-        DamageMod(29, 1.1, 0.9, *(await get_cheapest([44113, 44114]))),  # Kaatara's, Torelle's
-        DamageMod(24, 1.14, 0.9, *(await get_cheapest([15416]))),  # Naiyon's
-        DamageMod(20, 1.12, 0.89, *(await get_cheapest([15895, 13945]))),  # Faction
-    ]
 
 
 @commands.command()
@@ -409,6 +339,54 @@ async def ballistics(ctx, *args):
         [-r | -rof_rig <t1, t2, t1x2>]
         [-d | -damage_rig <t1, t2, t1x2>]
     """
+    ballistics_unique = await get_abyssals_mutamarket(
+        49738, "Abyssal Ballistics Control System"
+    )
+
+    ballistics_repeatable = [
+        DamageMod(
+            21484, "'Full Duplex' Ballistic Control System",
+            cpu=22, damage=1.10, rof=0.9
+        ),
+        DamageMod(
+            12274, "Ballistic Control System I",
+            cpu=35, damage=1.07, rof=0.92
+        ),
+        DamageMod(
+            16457, "Crosslink Compact Ballistic Control System",
+            cpu=31, damage=1.08, rof=0.90
+        ),
+        DamageMod(
+            22291, "Ballistic Control System II",
+            cpu=40, damage=1.1, rof=0.90
+        ),
+        DamageMod(
+            46270, "Kaatara's Custom Ballistic Control System",
+            cpu=38, damage=1.1, rof=0.90
+        ),
+        DamageMod(
+            15681, "Caldari Navy Ballistic Control System",
+            cpu=24, damage=1.12, rof=0.89
+        ),
+        DamageMod(
+            13935, "Domination Ballistic Control System",
+            cpu=24, damage=1.12, rof=0.89
+        ),
+        DamageMod(
+            13937, "Dread Guristas Ballistic Control System",
+            cpu=24, damage=1.12, rof=0.89
+        ),
+        DamageMod(
+            28563, "Khanid Navy Ballistic Control System",
+            cpu=24, damage=1.12, rof=0.89
+        ),
+        DamageMod(
+            15683, "Republic Fleet Ballistic Control System",
+            cpu=24, damage=1.12, rof=0.89
+        ),
+    ]
+
+    await fetch_module_prices(ballistics_repeatable)
     await send_best(ctx, args, ballistics_unique, ballistics_repeatable)
 
 
@@ -419,9 +397,31 @@ async def entropics(ctx, *args):
     !entropics <slots> <max_cpu> <min_price> <max_price>
         [-u|--uptime <value>]
         [-c|--count <value>]
-        [-r | -rof_rig <t1, t2, t1x2>]
-        [-d | -damage_rig <t1, t2, t1x2>]
     """
+    entropics_unique = await get_abyssals_mutamarket(
+        49734, "Abyssal Entropic Radiation Sink"
+    )
+
+    entropics_repeatable = [
+        DamageMod(
+            47908, "Entropic Radiation Sink I",
+            cpu=27, damage=1.09, rof=0.96
+        ),
+        DamageMod(
+            47909, "Compact Entropic Radiation Sink",
+            cpu=25, damage=1.10, rof=0.95
+        ),
+        DamageMod(
+            47911, "Entropic Radiation Sink II",
+            cpu=30, damage=1.13, rof=0.94
+        ),
+        DamageMod(
+            52244, "Veles Entropic Radiation Sink",
+            cpu=23, damage=1.14, rof=0.93
+        ),
+    ]
+
+    await fetch_module_prices(entropics_repeatable)
     await send_best(ctx, args, entropics_unique, entropics_repeatable)
 
 
@@ -435,6 +435,43 @@ async def gyros(ctx, *args):
         [-r | -rof_rig <t1, t2, t1x2>]
         [-d | -damage_rig <t1, t2, t1x2>]
     """
+
+    gyros_unique = await get_abyssals_mutamarket(
+        49730, "Abyssal Gyrostabilizer"
+    )
+
+    gyros_repeatable = [
+        DamageMod(
+            518, "'Basic' Gyrostabilizer",
+            cpu=16.0, damage=1.07, rof=0.93
+        ),
+        DamageMod(
+            519, "Gyrostabilizer II",
+            cpu=30.0, damage=1.10, rof=0.90
+        ),
+        DamageMod(
+            520, "Gyrostabilizer I",
+            cpu=27.0, damage=1.07, rof=0.92
+        ),
+        DamageMod(
+            21486, "'Kindred' Gyrostabilizer",
+            cpu=18.0, damage=1.10, rof=0.90,
+        ),
+        DamageMod(
+            5933, "Counterbalanced Compact Gyrostabilizer",
+            cpu=25.0, damage=1.08, rof=0.90,
+        ),
+        DamageMod(
+            13939, "Domination Gyrostabilizer",
+            cpu=20.0, damage=1.12, rof=0.89,
+        ),
+        DamageMod(
+            15806, "Republic Fleet Gyrostabilizer",
+            cpu=20.0, damage=1.12, rof=0.89,
+        ),
+    ]
+
+    await fetch_module_prices(gyros_repeatable)
     await send_best(ctx, args, gyros_unique, gyros_repeatable)
 
 
@@ -448,6 +485,51 @@ async def heatsinks(ctx, *args):
         [-r | -rof_rig <t1, t2, t1x2>]
         [-d | -damage_rig <t1, t2, t1x2>]
     """
+
+    heatsinks_unique = await get_abyssals_mutamarket(
+        49726, "Abyssal Heat Sink"
+    )
+
+    heatsinks_repeatable = [
+        DamageMod(
+            2363, "Heat Sink I",
+            cpu=35.0, damage=1.07, rof=0.92
+        ),
+        DamageMod(
+            5849, "Extruded Compact Heat Sink",
+            cpu=25.0, damage=1.08, rof=0.90
+        ),
+        DamageMod(
+            2364, "Heat Sink II",
+            cpu=30.0, damage=1.1, rof=0.90
+        ),
+        DamageMod(
+            1893, "'Basic' Heat Sink",
+            cpu=16.0, damage=1.07, rof=0.93
+        ),
+        DamageMod(
+            23902, "'Trebuchet' Heat Sink I",
+            cpu=18.0, damage=1.1, rof=0.9
+        ),
+        DamageMod(
+            44111, "Tahron's Custom Heat Sink",
+            cpu=29.0, damage=1.1, rof=0.9,
+        ),
+        DamageMod(
+            15810, "Imperial Navy Heat Sink",
+            cpu=20.0, damage=1.12, rof=0.89
+        ),
+        DamageMod(
+            13943, "True Sansha Heat Sink",
+            cpu=20.0, damage=1.12, rof=0.89
+        ),
+        DamageMod(
+            15808, "Ammatar Navy Heat Sink",
+            cpu=20.0, damage=1.12, rof=0.89
+        ),
+    ]
+
+    await fetch_module_prices(heatsinks_repeatable)
     await send_best(ctx, args, heatsinks_unique, heatsinks_repeatable)
 
 
@@ -461,6 +543,51 @@ async def magstabs(ctx, *args):
         [-r | -rof_rig <t1, t2, t1x2>]
         [-d | -damage_rig <t1, t2, t1x2>]
     """
+
+    magstabs_unique = await get_abyssals_mutamarket(
+        49722, "Abyssal Magnetic Field Stabilizer"
+    )
+
+    magstabs_repeatable = [
+        DamageMod(
+            9944, "Magnetic Field Stabilizer I",
+            cpu=35.0, damage=1.07, rof=0.92,
+        ),
+        DamageMod(
+            10190, "Magnetic Field Stabilizer II",
+            cpu=30.0, damage=1.10, rof=0.90,
+        ),
+        DamageMod(
+            10188, "'Basic' Magnetic Field Stabilizer",
+            cpu=16.0, damage=1.07, rof=0.93,
+        ),
+        DamageMod(
+            22919, "'Monopoly' Magnetic Field Stabilizer",
+            cpu=18.0, damage=1.10, rof=0.90,
+        ),
+        DamageMod(
+            44113, "Kaatara's Custom Magnetic Field Stabilizer",
+            cpu=29.0, damage=1.10, rof=0.90,
+        ),
+        DamageMod(
+            44114, "Torelle's Custom Magnetic Field Stabilizer",
+            cpu=29.0, damage=1.10, rof=0.90,
+        ),
+        DamageMod(
+            15416, "Naiyon's Modified Magnetic Field Stabilizer",
+            cpu=24.0, damage=1.14, rof=0.90,
+        ),
+        DamageMod(
+            15895, "Federation Navy Magnetic Field Stabilizer",
+            cpu=20.0, damage=1.12, rof=0.89,
+        ),
+        DamageMod(
+            13945, "Shadow Serpentis Magnetic Field Stabilizer",
+            cpu=20.0, damage=1.12, rof=0.89,
+        ),
+    ]
+
+    await fetch_module_prices(magstabs_repeatable)
     await send_best(ctx, args, magstabs_unique, magstabs_repeatable)
 
 
