@@ -201,6 +201,10 @@ class Module:
             if self.type_id == module_registry.get_id(type_name):
                 attrs[stat_registry.get_id("cpu")] *= 1 - 0.05 * skill
 
+        for type_name in ["sar", "mar", "lar", "saar", "maar", "laar"]:
+            if self.type_id == module_registry.get_id(type_name):
+                attrs[stat_registry.get_id("duration")] *= 1 - 0.05 * skill
+
         # Add calculated Attributes
         if stat_registry.get_id("shield_boost") in attrs:
             attrs[stat_registry.get_id("hp/s")] = attrs.get(stat_registry.get_id("shield_boost")) / attrs.get(
