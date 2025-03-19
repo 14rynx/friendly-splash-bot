@@ -2,6 +2,7 @@ import asyncio
 import heapq
 import itertools
 import logging
+from collections import defaultdict
 
 from discord.ext import commands
 
@@ -353,9 +354,17 @@ def filter_individual_modules(modules, stats_min, stats_max):
         if usable:
             yield module
 
+def generate_combinations(module_groups, counts):
+    """Generates all possible combinations of elements from different module groups,
+    allowing multiple selections up to the specified count for each group."""
+    for selections in itertools.product(
+        *[itertools.combinations_with_replacement(group, count) for group, count in zip(module_groups, counts)]
+    ):
+        yield tuple(itertools.chain.from_iterable(selections))
 
-def filter_module_sets(module_groups, stats_min, stats_max):
-    for combination in itertools.product(*module_groups):
+
+def filter_module_sets(module_groups, counts, stats_min, stats_max):
+    for combination in generate_combinations(module_groups, counts):
 
         usable = True
 
@@ -384,7 +393,7 @@ def stats_to_str(stats, sign="="):
     for requirement, value in stats.items():
         if type(requirement) is tuple:
             stat_id, type_id = requirement
-            ret += f"- {stat_registry.get_name(stat_id)} {sign} {value} for Abyssal {type_id}\n"
+            ret += f"- {stat_registry.get_name(stat_id)} {sign} {value} for each {module_registry.get_name(type_id)}\n"
         elif type(requirement) is int:
             stat_id = requirement
             ret += f"- {stat_registry.get_name(stat_id)} {sign} {value}\n"
@@ -424,16 +433,18 @@ async def multi(ctx, *args):
         )
 
     # Fetch modules
-    tasks = [get_abyssals(type_id) for type_id in module_ids]
+    module_counts = defaultdict(int)
+    for module_id in module_ids:
+        module_counts[module_id] += 1
+
+    tasks = [get_abyssals(tid) for tid in module_counts.keys()]
     module_groups = await asyncio.gather(*tasks)
 
     # Prefilter each module group to satisfy requirements individually
-    usable_module_groups = []
-    for m in module_groups:
-        usable_module_groups.append(filter_individual_modules(m, stats_min, stats_max))
+    usable_module_groups = [filter_individual_modules(m, stats_min, stats_max) for m in module_groups]
 
     # Filter for combined requirements
-    combinations = filter_module_sets(usable_module_groups, stats_min, stats_max)
+    combinations = filter_module_sets(usable_module_groups, module_counts.values(), stats_min, stats_max)
 
     # Build sorting functions
     if type(sort_by) is int:
