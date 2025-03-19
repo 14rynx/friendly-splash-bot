@@ -350,15 +350,15 @@ def filter_individual_modules(modules, stats_min, stats_max):
                 if module.type_id == module_id and stat_id in attributes and attributes[stat_id] < value:
                     usable = False
 
-
         if usable:
             yield module
 
+
 def generate_combinations(module_groups, counts):
-    """Generates all possible combinations of elements from different module groups,
-    allowing multiple selections up to the specified count for each group."""
+    """Generates all possible unique combinations of elements from different module groups,
+    ensuring unique selections within each group, and avoiding duplicate orders."""
     for selections in itertools.product(
-        *[itertools.combinations_with_replacement(group, count) for group, count in zip(module_groups, counts)]
+            *[itertools.combinations(group, count) for group, count in zip(module_groups, counts)]
     ):
         yield tuple(itertools.chain.from_iterable(selections))
 
