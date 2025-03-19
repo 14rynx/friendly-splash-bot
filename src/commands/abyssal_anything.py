@@ -202,23 +202,21 @@ class Module:
                 attrs[stat_registry.get_id("cpu")] *= 1 - 0.05 * skill
 
         # Add calculated Attributes
-        try:
-            attrs[stat_registry.get_id("hp/s")] = attrs[stat_registry.get_id("shield_boost")] / attrs[
-                stat_registry.get_id("duration")] * 1000
-        except KeyError:
-            pass
+        if stat_registry.get_id("shield_boost") in attrs:
+            attrs[stat_registry.get_id("hp/s")] = attrs.get(stat_registry.get_id("shield_boost")) / attrs.get(
+                stat_registry.get_id("duration")) * 1000
+            attrs[stat_registry.get_id("hp/gj")] = attrs.get(stat_registry.get_id("shield_boost")) / attrs.get(
+                stat_registry.get_id("cap"))
 
-        try:
-            attrs[stat_registry.get_id("hp/gj")] = attrs[stat_registry.get_id("shield_boost")] / attrs[
-                stat_registry.get_id("cap")]
-        except KeyError:
-            pass
+        if stat_registry.get_id("rep") in attrs:
+            attrs[stat_registry.get_id("hp/s")] = attrs.get(stat_registry.get_id("rep")) / attrs.get(
+                stat_registry.get_id("duration")) * 1000
+            attrs[stat_registry.get_id("hp/gj")] = attrs.get(stat_registry.get_id("rep")) / attrs.get(
+                stat_registry.get_id("cap"))
 
-        try:
-            attrs[stat_registry.get_id("gj/s")] = attrs[stat_registry.get_id("cap")] / attrs[
-                stat_registry.get_id("duration")] * 1000
-        except KeyError:
-            pass
+        if stat_registry.get_id("cap") in attrs:
+            attrs[stat_registry.get_id("gj/s")] = attrs[stat_registry.get_id("cap")] / attrs.get(
+                stat_registry.get_id("duration")) * 1000
 
         return attrs
 
