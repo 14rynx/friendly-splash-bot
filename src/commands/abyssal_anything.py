@@ -132,9 +132,8 @@ stat_registry.add(Entity(54, "Range", "range"))
 stat_registry.add(Entity(84, "Repair Amount", "rep"))
 stat_registry.add(Entity(1795, "Reload Time", "reload"))
 stat_registry.add(Entity(68, "Shield Boost Amount", "shield_boost"))
-stat_registry.add(Entity(97, "Energy Neutralizer Amount", "neut_amount"))
-stat_registry.add(Entity(97, "Energy Nosferatu Amount", "nos_amount"))
-stat_registry.add(Entity(90, "Cap Transfer Amount", "cap_amount"))
+stat_registry.add(Entity(97, "Energy Neutralizer/Nosferatu Amount", "cap_amount", "neut_amount", "nos_amount"))
+stat_registry.add(Entity(90, "Cap Transfer Amount", "ct_amount"))
 stat_registry.add(Entity(9, "Hitpoints", "hp"))
 stat_registry.add(Entity(147, "Capacitor Reduction", "cap_reduction"))
 stat_registry.add(Entity(796, "Mass Increase", "mass", "mass_increase"))
@@ -328,7 +327,7 @@ def parse_arguments(arguments):
     return module_ids, stats_min, stats_max, sort_by, largest_first
 
 
-def filter_individual_modules(modules, stats_max):
+def filter_individual_modules(modules, stats_min, stats_max):
     for module in modules:
         attributes = module.calculate_attributes()
 
@@ -343,6 +342,13 @@ def filter_individual_modules(modules, stats_max):
                 stat_id = requirement
                 if stat_id in attributes and attributes[stat_id] > value:
                     usable = False
+
+        for requirement, value in stats_min.items():
+            if type(requirement) is tuple:
+                stat_id, module_id = requirement
+                if module.type_id == module_id and stat_id in attributes and attributes[stat_id] < value:
+                    usable = False
+
 
         if usable:
             yield module
@@ -424,7 +430,7 @@ async def multi(ctx, *args):
     # Prefilter each module group to satisfy requirements individually
     usable_module_groups = []
     for m in module_groups:
-        usable_module_groups.append(filter_individual_modules(m, stats_max))
+        usable_module_groups.append(filter_individual_modules(m, stats_min, stats_max))
 
     # Filter for combined requirements
     combinations = filter_module_sets(usable_module_groups, stats_min, stats_max)
