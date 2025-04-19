@@ -1,12 +1,12 @@
 import asyncio
 import itertools
 
-import aiohttp
 from async_lru import alru_cache
+from discord import app_commands, Interaction
 from discord.ext import commands
 
 from network import get_item_name, get_item_price, get_dogma_attributes
-from utils import RelationalSorter, unix_style_arg_parser, convert, command_error_handler, isk
+from utils import RelationalSorter, convert, isk, slash_command_error_handler
 
 
 class Implant:
@@ -63,7 +63,7 @@ class ImplantSet:
                f"{''.join(str(i) for i in self.implants)}"
 
 
-async def implant_from_id(session, type_id, set_bonus_id=None, set_malus_id=None, set_multiplier_id=None,
+async def implant_from_id(type_id, set_bonus_id=None, set_malus_id=None, set_multiplier_id=None,
                           bonus_ids=None, malus_ids=None):
     name = await get_item_name(type_id)
     price = await get_item_price(type_id)
@@ -97,13 +97,12 @@ async def implant_from_id(session, type_id, set_bonus_id=None, set_malus_id=None
 
 async def implants_from_ids(type_ids, set_bonus_id=None, set_malus_id=None, set_multiplier_id=None, bonus_ids=None,
                             malus_ids=None):
-    async with aiohttp.ClientSession() as session:
-        tasks = [
-            implant_from_id(session, type_id, set_bonus_id, set_malus_id, set_multiplier_id, bonus_ids, malus_ids)
-            for type_id in type_ids
-        ]
-        implants = await asyncio.gather(*tasks)
-        return implants
+    tasks = [
+        implant_from_id(type_id, set_bonus_id, set_malus_id, set_multiplier_id, bonus_ids, malus_ids)
+        for type_id in type_ids
+    ]
+    implants = await asyncio.gather(*tasks)
+    return implants
 
 
 def combinations(implants):
@@ -117,24 +116,23 @@ def combinations(implants):
         yield ImplantSet(x)
 
 
-async def send_best(ctx, min_price, max_price, implants):
-    arguments = unix_style_arg_parser(min_price, max_price)
+async def send_best(interaction: Interaction, min_price: str, max_price: str, implants):
+    await interaction.response.defer()
 
-    if "help" in arguments:
-        await ctx.send(
-            f"")
-        return
+    min_price = convert(min_price)
+    max_price = convert(max_price)
 
     sorter = RelationalSorter([(c.price, c.bonus) for c in combinations(implants)])
-    filtered_combinations = [x for x in combinations(implants) if convert(min_price) <= x.price <= convert(max_price)]
+    filtered_combinations = [x for x in combinations(implants) if min_price <= x.price <= max_price]
 
     best_sets = sorted(filtered_combinations, key=lambda x: sorter((x.price, x.bonus)), reverse=True)[:3]
     ret = "\n".join([x.str_with_efficiency(sorter((x.price, x.bonus))) for x in best_sets])
 
     if ret == "":
-        ret = "No implant sets found for that price range! \n Make sure you give the price in ISK, you can use k / m / b as modifiers for thousands / millions / billions."
+        await interaction.followup.send("No implant sets found for that price range!")
+        return
 
-    await ctx.send(ret)
+    await interaction.followup.send(ret)
 
 
 @alru_cache(ttl=1800)
@@ -352,154 +350,190 @@ async def _virtues():
     )
 
 
-@commands.command()
-@command_error_handler
-async def ascendancies(ctx, min_price, max_price):
-    """
-    !ascendancies <min_price> <max_price>
-    """
-    await send_best(ctx, min_price, max_price, await _ascendancies())
+class ImplantCog(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
 
+    @app_commands.command(
+        name="ascendancies",
+        description="Get the best mixed ascendancy implant set for a prize point with pareto-optimization."
+    )
+    @app_commands.describe(
+        min_price="Minimum ISK price",
+        max_price="Maximum ISK price",
+    )
+    @slash_command_error_handler
+    async def ascendancies(self, interaction: Interaction, min_price: str, max_price: str):
+        await send_best(interaction, min_price, max_price, await _ascendancies())
 
-@commands.command()
-@command_error_handler
-async def asklepians(ctx, min_price, max_price):
-    """
-    !asklepians <min_price> <max_price>
-    """
-    await send_best(ctx, min_price, max_price, await _asklepians())
+    @app_commands.command(
+        name="asklepians",
+        description="Get the best mixed asklepian implant set for a prize point with pareto-optimization."
+    )
+    @app_commands.describe(
+        min_price="Minimum ISK price",
+        max_price="Maximum ISK price",
+    )
+    @slash_command_error_handler
+    async def asklepians(self, interaction: Interaction, min_price: str, max_price: str):
+        await send_best(interaction, min_price, max_price, await _asklepians())
 
+    @app_commands.command(
+        name="amulets",
+        description="Get the best mixed amulet implant set for a prize point with pareto-optimization."
+    )
+    @app_commands.describe(
+        min_price="Minimum ISK price",
+        max_price="Maximum ISK price",
+    )
+    @slash_command_error_handler
+    async def amulets(self, interaction: Interaction, min_price: str, max_price: str):
+        await send_best(interaction, min_price, max_price, await _amulets())
 
-@commands.command()
-@command_error_handler
-async def amulets(ctx, min_price, max_price):
-    """
-    !amulets <min_price> <max_price>
-    """
-    await send_best(ctx, min_price, max_price, await _amulets())
+    @app_commands.command(
+        name="crystals",
+        description="Get the best mixed crystal implant set for a prize point with pareto-optimization."
+    )
+    @app_commands.describe(
+        min_price="Minimum ISK price",
+        max_price="Maximum ISK price",
+    )
+    @slash_command_error_handler
+    async def crystals(self, interaction: Interaction, min_price: str, max_price: str):
+        await send_best(interaction, min_price, max_price, await _crystals())
 
+    @app_commands.command(
+        name="talismans",
+        description="Get the best mixed talisman implant set for a prize point with pareto-optimization."
+    )
+    @app_commands.describe(
+        min_price="Minimum ISK price",
+        max_price="Maximum ISK price",
+    )
+    @slash_command_error_handler
+    async def talismans(self, interaction: Interaction, min_price: str, max_price: str):
+        await send_best(interaction, min_price, max_price, await _talismans())
 
-@commands.command()
-@command_error_handler
-async def crystals(ctx, min_price, max_price):
-    """
-    !crystals <min_price> <max_price>
-    """
-    await send_best(ctx, min_price, max_price, await _crystals())
+    @app_commands.command(
+        name="snakes",
+        description="Get the best mixed snake implant set for a prize point with pareto-optimization."
+    )
+    @app_commands.describe(
+        min_price="Minimum ISK price",
+        max_price="Maximum ISK price",
+    )
+    @slash_command_error_handler
+    async def snakes(self, interaction: Interaction, min_price: str, max_price: str):
+        await send_best(interaction, min_price, max_price, await _snakes())
 
+    @app_commands.command(
+        name="halos",
+        description="Get the best mixed halo implant set for a prize point with pareto-optimization."
+    )
+    @app_commands.describe(
+        min_price="Minimum ISK price",
+        max_price="Maximum ISK price",
+    )
+    @slash_command_error_handler
+    async def halos(self, interaction: Interaction, min_price: str, max_price: str):
+        await send_best(interaction, min_price, max_price, await _halos())
 
-@commands.command()
-@command_error_handler
-async def talismans(ctx, min_price, max_price):
-    """
-    !talismans <min_price> <max_price>
-    """
-    await send_best(ctx, min_price, max_price, await _talismans())
+    @app_commands.command(
+        name="hydras",
+        description="Get the best mixed hydra implant set for a prize point with pareto-optimization."
+    )
+    @app_commands.describe(
+        min_price="Minimum ISK price",
+        max_price="Maximum ISK price",
+    )
+    @slash_command_error_handler
+    async def hydras(self, interaction: Interaction, min_price: str, max_price: str):
+        await send_best(interaction, min_price, max_price, await _hydras())
 
+    @app_commands.command(
+        name="mimesis",
+        description="Get the best mixed mimesis implant set for a prize point with pareto-optimization."
+    )
+    @app_commands.describe(
+        min_price="Minimum ISK price",
+        max_price="Maximum ISK price",
+    )
+    @slash_command_error_handler
+    async def mimesis(self, interaction: Interaction, min_price: str, max_price: str):
+        await send_best(interaction, min_price, max_price, await _mimesiss())
 
-@commands.command()
-@command_error_handler
-async def snakes(ctx, min_price, max_price):
-    """
-    !snakes <min_price> <max_price>
-    """
-    await send_best(ctx, min_price, max_price, await _snakes())
+    @app_commands.command(
+        name="raptures",
+        description="Get the best mixed rapture implant set for a prize point with pareto-optimization."
+    )
+    @app_commands.describe(
+        min_price="Minimum ISK price",
+        max_price="Maximum ISK price",
+    )
+    @slash_command_error_handler
+    async def raptures(self, interaction: Interaction, min_price: str, max_price: str):
+        await send_best(interaction, min_price, max_price, await _raptures())
 
+    @app_commands.command(
+        name="saviors",
+        description="Get the best mixed savior implant set for a prize point with pareto-optimization."
+    )
+    @app_commands.describe(
+        min_price="Minimum ISK price",
+        max_price="Maximum ISK price",
+    )
+    @slash_command_error_handler
+    async def saviors(self, interaction: Interaction, min_price: str, max_price: str):
+        await send_best(interaction, min_price, max_price, await _saviors())
 
-@commands.command()
-@command_error_handler
-async def halos(ctx, min_price, max_price):
-    """
-    !halos <min_price> <max_price>
-    """
-    await send_best(ctx, min_price, max_price, await _halos())
+    @app_commands.command(
+        name="harvests",
+        description="Get the best mixed harvest implant set for a prize point with pareto-optimization."
+    )
+    @app_commands.describe(
+        min_price="Minimum ISK price",
+        max_price="Maximum ISK price",
+    )
+    @slash_command_error_handler
+    async def harvests(self, interaction: Interaction, min_price: str, max_price: str):
+        await send_best(interaction, min_price, max_price, await _harvests())
 
+    @app_commands.command(
+        name="nirvanas",
+        description="Get the best mixed nirvana implant set for a prize point with pareto-optimization."
+    )
+    @app_commands.describe(
+        min_price="Minimum ISK price",
+        max_price="Maximum ISK price",
+    )
+    @slash_command_error_handler
+    async def nirvanas(self, interaction: Interaction, min_price: str, max_price: str):
+        await send_best(interaction, min_price, max_price, await _nirvanas())
 
-@commands.command()
-@command_error_handler
-async def hydras(ctx, min_price, max_price):
-    """
-    !hydras <min_price> <max_price>
-    """
-    await send_best(ctx, min_price, max_price, await _hydras())
+    @app_commands.command(
+        name="nomads",
+        description="Get the best mixed nomadimplant set for a prize point with pareto-optimization."
+    )
+    @app_commands.describe(
+        min_price="Minimum ISK price",
+        max_price="Maximum ISK price",
+    )
+    @slash_command_error_handler
+    async def nomads(self, interaction: Interaction, min_price: str, max_price: str):
+        await send_best(interaction, min_price, max_price, await _nomads())
 
-
-@commands.command()
-@command_error_handler
-async def mimesiss(ctx, min_price, max_price):
-    """
-    !mimesiss <min_price> <max_price>
-    """
-    await send_best(ctx, min_price, max_price, await _mimesiss())
-
-
-@commands.command()
-@command_error_handler
-async def raptures(ctx, min_price, max_price):
-    """
-    !raptures <min_price> <max_price>
-    """
-    await send_best(ctx, min_price, max_price, await _raptures())
-
-
-@commands.command()
-@command_error_handler
-async def saviors(ctx, min_price, max_price):
-    """
-    !saviors <min_price> <max_price>
-    """
-    await send_best(ctx, min_price, max_price, await _saviors())
-
-
-@commands.command()
-@command_error_handler
-async def harvests(ctx, min_price, max_price):
-    """
-    !harvests <min_price> <max_price>
-    """
-    await send_best(ctx, min_price, max_price, await _harvests())
-
-
-@commands.command()
-@command_error_handler
-async def nirvanas(ctx, min_price, max_price):
-    """
-    !nirvanas <min_price> <max_price>
-    """
-    await send_best(ctx, min_price, max_price, await _nirvanas())
-
-
-@commands.command()
-@command_error_handler
-async def nomads(ctx, min_price, max_price):
-    """
-    !nomads <min_price> <max_price>
-    """
-    await send_best(ctx, min_price, max_price, await _nomads())
-
-
-@commands.command()
-@command_error_handler
-async def virtues(ctx, min_price, max_price):
-    """
-    !virtues <min_price> <max_price>
-    """
-    await send_best(ctx, min_price, max_price, await _virtues())
+    @app_commands.command(
+        name="virtues",
+        description="Get the best mixed virtue implant set for a prize point with pareto-optimization."
+    )
+    @app_commands.describe(
+        min_price="Minimum ISK price",
+        max_price="Maximum ISK price",
+    )
+    @slash_command_error_handler
+    async def virtues(self, interaction: Interaction, min_price: str, max_price: str):
+        await send_best(interaction, min_price, max_price, await _virtues())
 
 
 async def setup(bot):
-    bot.add_command(ascendancies)
-    bot.add_command(asklepians)
-    bot.add_command(amulets)
-    bot.add_command(crystals)
-    bot.add_command(talismans)
-    bot.add_command(snakes)
-    bot.add_command(halos)
-    bot.add_command(hydras)
-    bot.add_command(mimesiss)
-    bot.add_command(raptures)
-    bot.add_command(saviors)
-    bot.add_command(harvests)
-    bot.add_command(nirvanas)
-    bot.add_command(nomads)
-    bot.add_command(virtues)
+    await bot.add_cog(ImplantCog(bot))
