@@ -19,7 +19,7 @@ def isk(number):
     return format(number, ",.0f").replace(',', "'") + " ISK"
 
 
-def convert(number_string):
+def convert(number_string: str):
     """Takes a number-string and converts it into a number, taking common abbreviations.
 
     Parameters
@@ -27,9 +27,18 @@ def convert(number_string):
     number_string : str
         something like 1b, 15m 10kk
     """
-    exponent = 3 * number_string.lower().count("k") + 6 * number_string.lower().count(
-        "m") + 9 * number_string.lower().count("b")
-    number = float(number_string.lower().replace("k", "").replace("m", "").replace("b", ""))
+    exponent = (
+            3 * number_string.lower().count("k") +
+            6 * number_string.lower().count("m") +
+            9 * number_string.lower().count("b")
+    )
+    number = float(
+        number_string.lower()
+        .replace("k", "")
+        .replace("m", "")
+        .replace("b", "")
+    )
+
     return number * 10 ** exponent
 
 
@@ -117,5 +126,21 @@ def command_error_handler(func):
         except Exception as e:
             logger.error(f"Error in !{func.__name__} command: {e}", exc_info=True)
             await ctx.send(f"An error occurred in !{func.__name__}.")
+
+    return wrapper
+
+
+def slash_command_error_handler(func):
+    """Decorator for handling bot command logging and exceptions."""
+
+    @functools.wraps(func)
+    async def wrapper(*args, **kwargs):
+        cls, interaction, *arguments = args
+        logger.info(f"{interaction.user.name} used !{func.__name__} {arguments} {kwargs}")
+
+        try:
+            return await func(*args, **kwargs)
+        except Exception as e:
+            logger.error(f"Error in !{func.__name__} command: {e}", exc_info=True)
 
     return wrapper

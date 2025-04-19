@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 
 import discord
@@ -10,6 +11,10 @@ intent.message_content = True
 client = discord.Client(intents=intent)
 
 bot = commands.Bot(command_prefix='!', intents=intent)
+
+# Configure the logger
+logger = logging.getLogger('discord.main')
+logger.setLevel(logging.INFO)
 
 extensions = [
     "commands.abyssal_damage_mods",
@@ -27,5 +32,16 @@ extensions = [
 
 for extension in extensions:
     asyncio.run(bot.load_extension(extension))
+
+
+@bot.event
+async def on_ready():
+    await bot.wait_until_ready()
+    try:
+        synced = await bot.tree.sync()
+        logger.info(f"Synced {len(synced)} slash commands.")
+    except Exception as e:
+        logger.info(f"Failed to sync commands: {e}")
+
 
 bot.run(os.environ["DISCORD_TOKEN"])

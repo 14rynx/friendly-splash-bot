@@ -2,13 +2,14 @@ import asyncio
 import functools
 import heapq
 import math
-from typing import Any, Generator
+from typing import Any, Generator, Optional
 
 from async_lru import alru_cache
+from discord import Interaction, app_commands
 from discord.ext import commands
 
 from network import get_item_price, get
-from utils import RelationalSorter, unix_style_arg_parser, command_error_handler, isk
+from utils import RelationalSorter, isk, slash_command_error_handler
 from utils import convert
 
 
@@ -253,47 +254,19 @@ def best_sets(
         yield damage_mod_set, sorter((price, damage_multiplier))
 
 
-async def send_best(ctx, args, unique_mods, repeatable_mods):
-    # Parse arguments
-    arguments = unix_style_arg_parser(args)
+async def send_best(interaction, args, unique_mods, repeatable_mods):
+    await interaction.response.defer()
+    slots, max_cpu, min_price, max_price, uptime, count, rof_rig, damage_rig = args
 
-    try:
-        slots = int(arguments[""][0])
-        max_cpu = float(arguments[""][1])
-        min_price = convert(arguments[""][2])
-        max_price = convert(arguments[""][3])
-    except (KeyError, IndexError, ValueError):
-        # Return early if the arguments can't be parsed
-        await ctx.send("Could not parse your arguments!")
-        return
+    # Parse human ISK prices e.g. 1b 1m 100kk
+    min_price = convert(min_price)
+    max_price = convert(max_price)
 
-    if "count" in arguments:
-        count = int(arguments["count"][0])
-    elif "c" in arguments:
-        count = int(arguments["c"][0])
-    else:
-        count = 3
-
-    if "uptime" in arguments:
-        uptime = float(arguments["uptime"][0])
-    elif "u" in arguments:
-        uptime = float(arguments["u"][0])
-    else:
-        uptime = 1.0
-
-    if "rof_rig" in arguments:
-        rof_rig = arguments["rof_rig"][0]
-    elif "r" in arguments:
-        rof_rig = arguments["r"][0]
-    else:
-        rof_rig = ""
-
-    if "damage_rig" in arguments:
-        damage_rig = arguments["damage_rig"][0]
-    elif "d" in arguments:
-        damage_rig = arguments["d"][0]
-    else:
-        damage_rig = ""
+    # Default arguments
+    count = count or 3
+    uptime = uptime or 1.0
+    rof_rig = rof_rig or ""
+    damage_rig = damage_rig or ""
 
     # Filter modules
     unique_mods = filter_modules(unique_mods, max_price)
@@ -303,11 +276,13 @@ async def send_best(ctx, args, unique_mods, repeatable_mods):
     total_combinations = (len(unique_mods) + len(repeatable_mods)) ** slots
 
     if total_combinations > 8e8:
-        await ctx.send(f"There are approximately {total_combinations} combinations - to many for the bot to handle!\n "
-                       "Consider reducing the price range or amount of slots.")
+        await interaction.followup.send(
+            f"There are approximately {total_combinations} combinations - to many for the bot to handle!\n "
+            "Consider reducing the price range or amount of slots.")
         return
     elif total_combinations > 1e8:
-        await ctx.send(f"This might take a while, there are approximately {total_combinations} combinations!")
+        await interaction.followup.send(
+            f"This might take a while, there are approximately {total_combinations} combinations!")
 
     # Find sets
     loop = asyncio.get_running_loop()
@@ -323,277 +298,367 @@ async def send_best(ctx, args, unique_mods, repeatable_mods):
     has_set = False
     for item_set, efficiency in sets:
         has_set = True
-        await ctx.send(f"Efficiency: {efficiency}\n {item_set}")
+        await interaction.followup.send(f"Efficiency: {efficiency}\n {item_set}")
 
     if not has_set:
-        await ctx.send("No combinations found for these requirements!")
+        await interaction.followup.send("No combinations found for these requirements!")
 
 
-@commands.command()
-@command_error_handler
-async def ballistics(ctx, *args):
-    """
-    !ballistics <slots> <max_cpu> <min_price> <max_price>
-        [-u|--uptime <value>]
-        [-c|--count <value>]
-        [-r | -rof_rig <t1, t2, t1x2>]
-        [-d | -damage_rig <t1, t2, t1x2>]
-    """
-    ballistics_unique = await get_abyssals_mutamarket(
-        49738, "Abyssal Ballistics Control System"
+class DamageModCog(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
+
+    @app_commands.command(
+        name="ballistics",
+        description="Get the best Ballistic Control System Set based on filters and pareto-optimization."
     )
-
-    ballistics_repeatable = [
-        DamageMod(
-            21484, "'Full Duplex' Ballistic Control System",
-            cpu=22, damage=1.10, rof=0.9
-        ),
-        DamageMod(
-            12274, "Ballistic Control System I",
-            cpu=35, damage=1.07, rof=0.92
-        ),
-        DamageMod(
-            16457, "Crosslink Compact Ballistic Control System",
-            cpu=31, damage=1.08, rof=0.90
-        ),
-        DamageMod(
-            22291, "Ballistic Control System II",
-            cpu=40, damage=1.1, rof=0.90
-        ),
-        DamageMod(
-            46270, "Kaatara's Custom Ballistic Control System",
-            cpu=38, damage=1.1, rof=0.90
-        ),
-        DamageMod(
-            15681, "Caldari Navy Ballistic Control System",
-            cpu=24, damage=1.12, rof=0.89
-        ),
-        DamageMod(
-            13935, "Domination Ballistic Control System",
-            cpu=24, damage=1.12, rof=0.89
-        ),
-        DamageMod(
-            13937, "Dread Guristas Ballistic Control System",
-            cpu=24, damage=1.12, rof=0.89
-        ),
-        DamageMod(
-            28563, "Khanid Navy Ballistic Control System",
-            cpu=24, damage=1.12, rof=0.89
-        ),
-        DamageMod(
-            15683, "Republic Fleet Ballistic Control System",
-            cpu=24, damage=1.12, rof=0.89
-        ),
-    ]
-
-    await fetch_module_prices(ballistics_repeatable)
-    await send_best(ctx, args, ballistics_unique, ballistics_repeatable)
-
-
-@commands.command()
-@command_error_handler
-async def entropics(ctx, *args):
-    """
-    !entropics <slots> <max_cpu> <min_price> <max_price>
-        [-u|--uptime <value>]
-        [-c|--count <value>]
-    """
-    entropics_unique = await get_abyssals_mutamarket(
-        49734, "Abyssal Entropic Radiation Sink"
+    @app_commands.describe(
+        slots="Number of module slots (e.g. 2, 3)",
+        max_cpu="Maximum CPU available",
+        min_price="Minimum ISK price",
+        max_price="Maximum ISK price",
+        uptime="Uptime percentage of guns without damage mods (optional)",
+        count="Number of combinations to show (optional)",
+        rof_rig="ROF rig type fitted (optional, e.g. t1, t2, t1x2)",
+        damage_rig="Damage rig type fitted (optional, e.g. t1, t2, t1x2)"
     )
+    @slash_command_error_handler
+    async def ballistics(
+            self,
+            interaction: Interaction,
+            slots: int,
+            max_cpu: float,
+            min_price: str,
+            max_price: str,
+            uptime: Optional[float] = None,
+            count: Optional[int] = None,
+            rof_rig: Optional[str] = None,
+            damage_rig: Optional[str] = None
+    ):
+        args = (slots, max_cpu, min_price, max_price, uptime, count, rof_rig, damage_rig)
 
-    entropics_repeatable = [
-        DamageMod(
-            47908, "Entropic Radiation Sink I",
-            cpu=27, damage=1.09, rof=0.96
-        ),
-        DamageMod(
-            47909, "Compact Entropic Radiation Sink",
-            cpu=25, damage=1.10, rof=0.95
-        ),
-        DamageMod(
-            47911, "Entropic Radiation Sink II",
-            cpu=30, damage=1.13, rof=0.94
-        ),
-        DamageMod(
-            52244, "Veles Entropic Radiation Sink",
-            cpu=23, damage=1.14, rof=0.93
-        ),
-    ]
+        ballistics_unique = await get_abyssals_mutamarket(
+            49738, "Abyssal Ballistics Control System"
+        )
 
-    await fetch_module_prices(entropics_repeatable)
-    await send_best(ctx, args, entropics_unique, entropics_repeatable)
+        ballistics_repeatable = [
+            DamageMod(
+                21484, "'Full Duplex' Ballistic Control System",
+                cpu=22, damage=1.10, rof=0.9
+            ),
+            DamageMod(
+                12274, "Ballistic Control System I",
+                cpu=35, damage=1.07, rof=0.92
+            ),
+            DamageMod(
+                16457, "Crosslink Compact Ballistic Control System",
+                cpu=31, damage=1.08, rof=0.90
+            ),
+            DamageMod(
+                22291, "Ballistic Control System II",
+                cpu=40, damage=1.1, rof=0.90
+            ),
+            DamageMod(
+                46270, "Kaatara's Custom Ballistic Control System",
+                cpu=38, damage=1.1, rof=0.90
+            ),
+            DamageMod(
+                15681, "Caldari Navy Ballistic Control System",
+                cpu=24, damage=1.12, rof=0.89
+            ),
+            DamageMod(
+                13935, "Domination Ballistic Control System",
+                cpu=24, damage=1.12, rof=0.89
+            ),
+            DamageMod(
+                13937, "Dread Guristas Ballistic Control System",
+                cpu=24, damage=1.12, rof=0.89
+            ),
+            DamageMod(
+                28563, "Khanid Navy Ballistic Control System",
+                cpu=24, damage=1.12, rof=0.89
+            ),
+            DamageMod(
+                15683, "Republic Fleet Ballistic Control System",
+                cpu=24, damage=1.12, rof=0.89
+            ),
+        ]
 
+        await fetch_module_prices(ballistics_repeatable)
+        await send_best(interaction, args, ballistics_unique, ballistics_repeatable)
 
-@commands.command()
-@command_error_handler
-async def gyros(ctx, *args):
-    """
-    !gyros <slots> <max_cpu> <min_price> <max_price>
-        [-u|--uptime <value>]
-        [-c|--count <value>]
-        [-r | -rof_rig <t1, t2, t1x2>]
-        [-d | -damage_rig <t1, t2, t1x2>]
-    """
-
-    gyros_unique = await get_abyssals_mutamarket(
-        49730, "Abyssal Gyrostabilizer"
+    @app_commands.command(
+        name="entropics",
+        description="Get the best Entropic Radiation Sink Set based on filters and pareto-optimization."
     )
-
-    gyros_repeatable = [
-        DamageMod(
-            518, "'Basic' Gyrostabilizer",
-            cpu=16.0, damage=1.07, rof=0.93
-        ),
-        DamageMod(
-            519, "Gyrostabilizer II",
-            cpu=30.0, damage=1.10, rof=0.90
-        ),
-        DamageMod(
-            520, "Gyrostabilizer I",
-            cpu=27.0, damage=1.07, rof=0.92
-        ),
-        DamageMod(
-            21486, "'Kindred' Gyrostabilizer",
-            cpu=18.0, damage=1.10, rof=0.90,
-        ),
-        DamageMod(
-            5933, "Counterbalanced Compact Gyrostabilizer",
-            cpu=25.0, damage=1.08, rof=0.90,
-        ),
-        DamageMod(
-            13939, "Domination Gyrostabilizer",
-            cpu=20.0, damage=1.12, rof=0.89,
-        ),
-        DamageMod(
-            15806, "Republic Fleet Gyrostabilizer",
-            cpu=20.0, damage=1.12, rof=0.89,
-        ),
-    ]
-
-    await fetch_module_prices(gyros_repeatable)
-    await send_best(ctx, args, gyros_unique, gyros_repeatable)
-
-
-@commands.command()
-@command_error_handler
-async def heatsinks(ctx, *args):
-    """
-    !heatsinks <slots> <max_cpu> <min_price> <max_price>
-        [-u|--uptime <value>]
-        [-c|--count <value>]
-        [-r | -rof_rig <t1, t2, t1x2>]
-        [-d | -damage_rig <t1, t2, t1x2>]
-    """
-
-    heatsinks_unique = await get_abyssals_mutamarket(
-        49726, "Abyssal Heat Sink"
+    @app_commands.describe(
+        slots="Number of module slots (e.g. 2, 3)",
+        max_cpu="Maximum CPU available",
+        min_price="Minimum ISK price",
+        max_price="Maximum ISK price",
+        uptime="Uptime percentage of guns without damage mods (optional)",
+        count="Number of combinations to show (optional)",
+        rof_rig="ROF rig type fitted (optional, e.g. t1, t2, t1x2)",
+        damage_rig="Damage rig type fitted (optional, e.g. t1, t2, t1x2)"
     )
+    @slash_command_error_handler
+    async def entropics(
+            self,
+            interaction: Interaction,
+            slots: int,
+            max_cpu: float,
+            min_price: str,
+            max_price: str,
+            uptime: Optional[float] = None,
+            count: Optional[int] = None,
+            rof_rig: Optional[str] = None,
+            damage_rig: Optional[str] = None
+    ):
+        args = (slots, max_cpu, min_price, max_price, uptime, count, rof_rig, damage_rig)
 
-    heatsinks_repeatable = [
-        DamageMod(
-            2363, "Heat Sink I",
-            cpu=35.0, damage=1.07, rof=0.92
-        ),
-        DamageMod(
-            5849, "Extruded Compact Heat Sink",
-            cpu=25.0, damage=1.08, rof=0.90
-        ),
-        DamageMod(
-            2364, "Heat Sink II",
-            cpu=30.0, damage=1.1, rof=0.90
-        ),
-        DamageMod(
-            1893, "'Basic' Heat Sink",
-            cpu=16.0, damage=1.07, rof=0.93
-        ),
-        DamageMod(
-            23902, "'Trebuchet' Heat Sink I",
-            cpu=18.0, damage=1.1, rof=0.9
-        ),
-        DamageMod(
-            44111, "Tahron's Custom Heat Sink",
-            cpu=29.0, damage=1.1, rof=0.9,
-        ),
-        DamageMod(
-            15810, "Imperial Navy Heat Sink",
-            cpu=20.0, damage=1.12, rof=0.89
-        ),
-        DamageMod(
-            13943, "True Sansha Heat Sink",
-            cpu=20.0, damage=1.12, rof=0.89
-        ),
-        DamageMod(
-            15808, "Ammatar Navy Heat Sink",
-            cpu=20.0, damage=1.12, rof=0.89
-        ),
-    ]
+        entropics_unique = await get_abyssals_mutamarket(
+            49734, "Abyssal Entropic Radiation Sink"
+        )
 
-    await fetch_module_prices(heatsinks_repeatable)
-    await send_best(ctx, args, heatsinks_unique, heatsinks_repeatable)
+        entropics_repeatable = [
+            DamageMod(
+                47908, "Entropic Radiation Sink I",
+                cpu=27, damage=1.09, rof=0.96
+            ),
+            DamageMod(
+                47909, "Compact Entropic Radiation Sink",
+                cpu=25, damage=1.10, rof=0.95
+            ),
+            DamageMod(
+                47911, "Entropic Radiation Sink II",
+                cpu=30, damage=1.13, rof=0.94
+            ),
+            DamageMod(
+                52244, "Veles Entropic Radiation Sink",
+                cpu=23, damage=1.14, rof=0.93
+            ),
+        ]
 
+        await fetch_module_prices(entropics_repeatable)
+        await send_best(interaction, args, entropics_unique, entropics_repeatable)
 
-@commands.command()
-@command_error_handler
-async def magstabs(ctx, *args):
-    """
-    !magstabs <slots> <max_cpu> <min_price> <max_price>
-        [-u|--uptime <value>]
-        [-c|--count <value>]
-        [-r | -rof_rig <t1, t2, t1x2>]
-        [-d | -damage_rig <t1, t2, t1x2>]
-    """
-
-    magstabs_unique = await get_abyssals_mutamarket(
-        49722, "Abyssal Magnetic Field Stabilizer"
+    @app_commands.command(
+        name="gyros",
+        description="Get the best Gyrostabilizer Set based on filters and pareto-optimization."
     )
+    @app_commands.describe(
+        slots="Number of module slots (e.g. 2, 3)",
+        max_cpu="Maximum CPU available",
+        min_price="Minimum ISK price",
+        max_price="Maximum ISK price",
+        uptime="Uptime percentage of guns without damage mods (optional)",
+        count="Number of combinations to show (optional)",
+        rof_rig="ROF rig type fitted (optional, e.g. t1, t2, t1x2)",
+        damage_rig="Damage rig type fitted (optional, e.g. t1, t2, t1x2)"
+    )
+    @slash_command_error_handler
+    async def gyros(
+            self,
+            interaction: Interaction,
+            slots: int,
+            max_cpu: float,
+            min_price: str,
+            max_price: str,
+            uptime: Optional[float] = None,
+            count: Optional[int] = None,
+            rof_rig: Optional[str] = None,
+            damage_rig: Optional[str] = None
+    ):
+        args = (slots, max_cpu, min_price, max_price, uptime, count, rof_rig, damage_rig)
 
-    magstabs_repeatable = [
-        DamageMod(
-            9944, "Magnetic Field Stabilizer I",
-            cpu=35.0, damage=1.07, rof=0.92,
-        ),
-        DamageMod(
-            10190, "Magnetic Field Stabilizer II",
-            cpu=30.0, damage=1.10, rof=0.90,
-        ),
-        DamageMod(
-            10188, "'Basic' Magnetic Field Stabilizer",
-            cpu=16.0, damage=1.07, rof=0.93,
-        ),
-        DamageMod(
-            22919, "'Monopoly' Magnetic Field Stabilizer",
-            cpu=18.0, damage=1.10, rof=0.90,
-        ),
-        DamageMod(
-            44113, "Kaatara's Custom Magnetic Field Stabilizer",
-            cpu=29.0, damage=1.10, rof=0.90,
-        ),
-        DamageMod(
-            44114, "Torelle's Custom Magnetic Field Stabilizer",
-            cpu=29.0, damage=1.10, rof=0.90,
-        ),
-        DamageMod(
-            15416, "Naiyon's Modified Magnetic Field Stabilizer",
-            cpu=24.0, damage=1.14, rof=0.90,
-        ),
-        DamageMod(
-            15895, "Federation Navy Magnetic Field Stabilizer",
-            cpu=20.0, damage=1.12, rof=0.89,
-        ),
-        DamageMod(
-            13945, "Shadow Serpentis Magnetic Field Stabilizer",
-            cpu=20.0, damage=1.12, rof=0.89,
-        ),
-    ]
+        gyros_unique = await get_abyssals_mutamarket(
+            49730, "Abyssal Gyrostabilizer"
+        )
 
-    await fetch_module_prices(magstabs_repeatable)
-    await send_best(ctx, args, magstabs_unique, magstabs_repeatable)
+        gyros_repeatable = [
+            DamageMod(
+                518, "'Basic' Gyrostabilizer",
+                cpu=16.0, damage=1.07, rof=0.93
+            ),
+            DamageMod(
+                519, "Gyrostabilizer II",
+                cpu=30.0, damage=1.10, rof=0.90
+            ),
+            DamageMod(
+                520, "Gyrostabilizer I",
+                cpu=27.0, damage=1.07, rof=0.92
+            ),
+            DamageMod(
+                21486, "'Kindred' Gyrostabilizer",
+                cpu=18.0, damage=1.10, rof=0.90,
+            ),
+            DamageMod(
+                5933, "Counterbalanced Compact Gyrostabilizer",
+                cpu=25.0, damage=1.08, rof=0.90,
+            ),
+            DamageMod(
+                13939, "Domination Gyrostabilizer",
+                cpu=20.0, damage=1.12, rof=0.89,
+            ),
+            DamageMod(
+                15806, "Republic Fleet Gyrostabilizer",
+                cpu=20.0, damage=1.12, rof=0.89,
+            ),
+        ]
+
+        await fetch_module_prices(gyros_repeatable)
+        await send_best(interaction, args, gyros_unique, gyros_repeatable)
+
+    @app_commands.command(
+        name="heatsinks",
+        description="Get the best Heat Sink Set based on filters and pareto-optimization."
+    )
+    @app_commands.describe(
+        slots="Number of module slots (e.g. 2, 3)",
+        max_cpu="Maximum CPU available",
+        min_price="Minimum ISK price",
+        max_price="Maximum ISK price",
+        uptime="Uptime percentage of guns without damage mods (optional)",
+        count="Number of combinations to show (optional)",
+        rof_rig="ROF rig type fitted (optional, e.g. t1, t2, t1x2)",
+        damage_rig="Damage rig type fitted (optional, e.g. t1, t2, t1x2)"
+    )
+    @slash_command_error_handler
+    async def heatsinks(
+            self,
+            interaction: Interaction,
+            slots: int,
+            max_cpu: float,
+            min_price: str,
+            max_price: str,
+            uptime: Optional[float] = None,
+            count: Optional[int] = None,
+            rof_rig: Optional[str] = None,
+            damage_rig: Optional[str] = None
+    ):
+        args = (slots, max_cpu, min_price, max_price, uptime, count, rof_rig, damage_rig)
+
+        heatsinks_unique = await get_abyssals_mutamarket(
+            49726, "Abyssal Heat Sink"
+        )
+
+        heatsinks_repeatable = [
+            DamageMod(
+                2363, "Heat Sink I",
+                cpu=35.0, damage=1.07, rof=0.92
+            ),
+            DamageMod(
+                5849, "Extruded Compact Heat Sink",
+                cpu=25.0, damage=1.08, rof=0.90
+            ),
+            DamageMod(
+                2364, "Heat Sink II",
+                cpu=30.0, damage=1.1, rof=0.90
+            ),
+            DamageMod(
+                1893, "'Basic' Heat Sink",
+                cpu=16.0, damage=1.07, rof=0.93
+            ),
+            DamageMod(
+                23902, "'Trebuchet' Heat Sink I",
+                cpu=18.0, damage=1.1, rof=0.9
+            ),
+            DamageMod(
+                44111, "Tahron's Custom Heat Sink",
+                cpu=29.0, damage=1.1, rof=0.9,
+            ),
+            DamageMod(
+                15810, "Imperial Navy Heat Sink",
+                cpu=20.0, damage=1.12, rof=0.89
+            ),
+            DamageMod(
+                13943, "True Sansha Heat Sink",
+                cpu=20.0, damage=1.12, rof=0.89
+            ),
+            DamageMod(
+                15808, "Ammatar Navy Heat Sink",
+                cpu=20.0, damage=1.12, rof=0.89
+            ),
+        ]
+
+        await fetch_module_prices(heatsinks_repeatable)
+        await send_best(interaction, args, heatsinks_unique, heatsinks_repeatable)
+
+    @app_commands.command(
+        name="magstabs",
+        description="Get the best Magnetic Field Stabilizer Set based on filters and pareto-optimization."
+    )
+    @app_commands.describe(
+        slots="Number of module slots (e.g. 2, 3)",
+        max_cpu="Maximum CPU available",
+        min_price="Minimum ISK price",
+        max_price="Maximum ISK price",
+        uptime="Uptime percentage of guns without damage mods (optional)",
+        count="Number of combinations to show (optional)",
+        rof_rig="ROF rig type fitted (optional, e.g. t1, t2, t1x2)",
+        damage_rig="Damage rig type fitted (optional, e.g. t1, t2, t1x2)"
+    )
+    @slash_command_error_handler
+    async def magstabs(
+            self,
+            interaction: Interaction,
+            slots: int,
+            max_cpu: float,
+            min_price: str,
+            max_price: str,
+            uptime: Optional[float] = None,
+            count: Optional[int] = None,
+            rof_rig: Optional[str] = None,
+            damage_rig: Optional[str] = None
+    ):
+        args = (slots, max_cpu, min_price, max_price, uptime, count, rof_rig, damage_rig)
+
+        magstabs_unique = await get_abyssals_mutamarket(
+            49722, "Abyssal Magnetic Field Stabilizer"
+        )
+
+        magstabs_repeatable = [
+            DamageMod(
+                9944, "Magnetic Field Stabilizer I",
+                cpu=35.0, damage=1.07, rof=0.92,
+            ),
+            DamageMod(
+                10190, "Magnetic Field Stabilizer II",
+                cpu=30.0, damage=1.10, rof=0.90,
+            ),
+            DamageMod(
+                10188, "'Basic' Magnetic Field Stabilizer",
+                cpu=16.0, damage=1.07, rof=0.93,
+            ),
+            DamageMod(
+                22919, "'Monopoly' Magnetic Field Stabilizer",
+                cpu=18.0, damage=1.10, rof=0.90,
+            ),
+            DamageMod(
+                44113, "Kaatara's Custom Magnetic Field Stabilizer",
+                cpu=29.0, damage=1.10, rof=0.90,
+            ),
+            DamageMod(
+                44114, "Torelle's Custom Magnetic Field Stabilizer",
+                cpu=29.0, damage=1.10, rof=0.90,
+            ),
+            DamageMod(
+                15416, "Naiyon's Modified Magnetic Field Stabilizer",
+                cpu=24.0, damage=1.14, rof=0.90,
+            ),
+            DamageMod(
+                15895, "Federation Navy Magnetic Field Stabilizer",
+                cpu=20.0, damage=1.12, rof=0.89,
+            ),
+            DamageMod(
+                13945, "Shadow Serpentis Magnetic Field Stabilizer",
+                cpu=20.0, damage=1.12, rof=0.89,
+            ),
+        ]
+
+        await fetch_module_prices(magstabs_repeatable)
+        await send_best(interaction, args, magstabs_unique, magstabs_repeatable)
 
 
 async def setup(bot):
-    bot.add_command(ballistics)
-    bot.add_command(entropics)
-    bot.add_command(gyros)
-    bot.add_command(heatsinks)
-    bot.add_command(magstabs)
+    await bot.add_cog(DamageModCog(bot))
