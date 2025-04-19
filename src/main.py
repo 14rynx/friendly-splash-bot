@@ -24,8 +24,6 @@ extensions = [
     # "commands.corp",
     # "commands.heat", # Deactivated due to needing explanation / rework
     # "commands.rolling", # Deactivated due to np-hard and no good limits
-    "commands.stonks",
-    "commands.teams",
     "commands.abyssal_anything",
     # "commands.zkill",
 ]
