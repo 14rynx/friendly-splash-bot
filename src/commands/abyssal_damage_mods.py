@@ -126,7 +126,7 @@ class DamageModSet:
 @alru_cache(ttl=60)
 async def get_abyssals_mutamarket(type_id: int, type_name: str):
     """Fetch all abyssals from a certain type from the mutamarket API"""
-    url = f"https://mutamarket.com/api/modules/type/{type_id}/item-exchange/contracts-only/"
+    url = f"https://mutamarket.com/api/modules/type/{type_id}/item-exchange/contracts-only/?region_id=10000002"
     item_data = await get(url)
 
     modules = []
@@ -137,8 +137,9 @@ async def get_abyssals_mutamarket(type_id: int, type_name: str):
         if not contract.get("type") == "item_exchange":
             continue
 
-        if not contract.get("region_id", 10000002) == 10000002:
-            continue
+        # Region now in querry parameter
+        # if not contract.get("region_id", 10000002) == 10000002:
+        #     continue
 
         if not contract.get("plex_count", 0) == 0:
             continue
